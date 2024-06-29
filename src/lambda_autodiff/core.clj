@@ -3,26 +3,25 @@
 (defn make-node
   "Creates a node in the computational graph"
   ([value]
-   (make-node value nil [] []))
-  ([value label children edges]
+   (make-node value nil))
+  ([value label]
+   (make-node value label {}))
+  ([value label children]
    {:value value
     :label label
-    :children children
-    :edges edges}))
+    :children children}))
 
 (defn add
   [a b]
   (make-node (+ (:value a) (:value b))
              "+"
-             [a b]
-             [1 1]))
+             {a 1 b 1}))
 
 (defn mul
   [a b]
   (make-node (* (:value a) (:value b))
              "*"
-             [a b]
-             [(:value b) (:value a)]))
+             {a (:value b) b (:value a)}))
 
 (defn differentiate
   "Returns a map of nodes to partial derivative values"
@@ -37,14 +36,14 @@
                                           [(assoc gs child (+ (get gs child 0) (* product weight)))
                                            (conj st [child (* product weight)])])
                                         [gradients (pop stack)]
-                                        (map vector (:children node) (:edges node)))]
+                                        (seq (:children node)))]
         (recur gradients' stack')))))
 
 (defn -main
   [& args]
-  (let [a (make-node 4 "a" [] [])
-        b (make-node 3 "b" [] [])
-        e (make-node 2 "e" [] [])
+  (let [a (make-node 4 "a")
+        b (make-node 3 "b")
+        e (make-node 2 "e")
         c (add a b)
         d (mul a c)
         f (mul b e)
