@@ -1,4 +1,5 @@
-(ns lambda-autodiff.core)
+(ns lambda-autodiff.core
+  (:require [clojure.math :as math]))
 
 (defn make-node
   "Creates a node in the computational graph"
@@ -23,6 +24,12 @@
              "*"
              {a (:value b) b (:value a)}))
 
+(defn tanh
+  [a]
+  (let [out (/ (- (math/exp (* 2 (:value a))) 1)
+               (+ (math/exp (* 2 (:value a))) 1))]
+    (make-node out "tanh" {a (- 1 (* out out))})))
+
 (defn differentiate
   "Returns a map of nodes to partial derivative values"
   [root]
@@ -39,6 +46,7 @@
                                         (seq (:children node)))]
         (recur gradients' stack')))))
 
+;; Temp; for testing
 (defn -main
   [& args]
   (let [a (make-node 4 "a")
