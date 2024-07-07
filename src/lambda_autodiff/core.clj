@@ -6,7 +6,7 @@
   ([value]
    (make-node value nil))
   ([value label]
-   (make-node value label {}))
+   (make-node value label []))
   ([value label children]
    {:value value
     :label label
@@ -16,19 +16,19 @@
   [a b]
   (make-node (+ (:value a) (:value b))
              "+"
-             {a 1 b 1}))
+             [[a 1] [b 1]]))
 
 (defn mul
   [a b]
   (make-node (* (:value a) (:value b))
              "*"
-             {a (:value b) b (:value a)}))
+             [[a (:value b)] [b (:value a)]]))
 
 (defn tanh
   [a]
   (let [out (/ (- (math/exp (* 2 (:value a))) 1)
                (+ (math/exp (* 2 (:value a))) 1))]
-    (make-node out "tanh" {a (- 1 (* out out))})))
+    (make-node out "tanh" [a (- 1 (* out out))])))
 
 (defn differentiate
   "Returns a map of nodes to partial derivative values"
@@ -43,7 +43,7 @@
                                           [(assoc gs child (+ (get gs child 0) (* product weight)))
                                            (conj st [child (* product weight)])])
                                         [gradients (pop stack)]
-                                        (seq (:children node)))]
+                                        (:children node))]
         (recur gradients' stack')))))
 
 ;; Temp; for testing
