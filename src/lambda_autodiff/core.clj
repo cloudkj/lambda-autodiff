@@ -94,11 +94,16 @@
          stack (list [root 1])]
     (if (empty? stack)
       gradients
-      (let [[node product] (peek stack)
-            [gradients' stack'] (reduce (fn [[gs st] [child weight]]
-                                          ;;(println (.label node) "---" weight "--->" (.label child))
-                                          [(assoc gs child (+ (get gs child 0) (* product weight)))
-                                           (conj st [child (* product weight)])])
-                                        [gradients (pop stack)]
-                                        (.children node))]
-        (recur gradients' stack')))))
+      (let [[node partial] (peek stack)]
+        (recur (->> (.children node)
+                    (map (fn [[child local]]
+                      [child
+                       ;; Accumulating gradients for each child is application of multivariate chain rule
+                       (+ (get gradients child 0)
+                          ;; Partial * local is application of chain rule along the path from root node
+                          (* partial local))]))
+                    (into gradients))
+               ;; Push all child nodes onto stack and update product of local derivatives from root to child thus far
+               (->> (.children node)
+                    (map (fn [[child local]] [child (* partial local)]))
+                    (reduce conj (pop stack))))))))
