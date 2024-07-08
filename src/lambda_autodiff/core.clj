@@ -1,6 +1,15 @@
 (ns lambda-autodiff.core
   (:require [clojure.math :as math]))
 
+;; Custom type to represent a node in the computational graph. Each node instance is a unique entity, independent of
+;; underlying values. We use a custom type as workaround for Clojure default value-based equality/hashing behavior.
+(deftype Node [value label children]
+  Object
+  (toString [node]
+    (if (nil? (.label node))
+      (str (.value node))
+      (format "%s [%s]" (.label node) (str (.value node))))))
+
 (defn make-node
   "Creates a node in the computational graph"
   ([value]
@@ -8,27 +17,70 @@
   ([value label]
    (make-node value label []))
   ([value label children]
-   {:value value
-    :label label
-    :children children}))
+   (Node. value label children)))
+
+(defn make-graphviz-dot
+  "Generates the computational graph starting at a node in Graphviz DOT format"
+  [root]
+  (loop [dot (str "digraph G {\n")
+         stack (list root)]
+    (if (empty? stack)
+      (str dot "}")
+      (let [node (peek stack)
+            dot' (str dot (format "%s [label=\"%s\"];\n" (hash node) (str node)))]
+        (recur (->> (.children node)
+                    (map (fn [[child weight]] (format "%s -> %s [label=\"%s\"];\n" (hash node) (hash child) weight)))
+                    (reduce str dot'))
+               (->> (.children node)
+                    (map (fn [[child weight]] child))
+                    (reduce conj (pop stack))))))))
+
+;; Operators
 
 (defn add
   [a b]
-  (make-node (+ (:value a) (:value b))
+  (make-node (+ (.value a) (.value b))
              "+"
              [[a 1] [b 1]]))
 
 (defn mul
   [a b]
-  (make-node (* (:value a) (:value b))
+  (make-node (* (.value a) (.value b))
              "*"
-             [[a (:value b)] [b (:value a)]]))
+             [[a (.value b)] [b (.value a)]]))
+
+(defn pow
+  [a b]
+  ;; TODO: add restriction that `b` is scalar-only and not another node
+  (make-node (math/pow (.value a) b)
+              "pow"
+              [[a (* b (math/pow (.value a) (- b 1)))]]))
 
 (defn tanh
   [a]
-  (let [out (/ (- (math/exp (* 2 (:value a))) 1)
-               (+ (math/exp (* 2 (:value a))) 1))]
-    (make-node out "tanh" [a (- 1 (* out out))])))
+  (let [out (/ (- (math/exp (* 2 (.value a))) 1)
+               (+ (math/exp (* 2 (.value a))) 1))]
+    (make-node out "tanh" [[a (- 1 (* out out))]])))
+
+(defn relu
+  [a]
+  (make-node (if (> (.value a) 0) (.value a) 0)
+             "relu"
+             [[a (if (> (.value a) 0) 1 0)]]))
+
+(defn div
+  [a b]
+  (mul a (pow b -1)))
+
+(defn neg
+  [a]
+  (mul a (make-node -1)))
+
+(defn sub
+  [a b]
+  (add a (neg b)))
+
+;; API
 
 (defn differentiate
   "Returns a map of nodes to partial derivative values"
@@ -39,24 +91,9 @@
       gradients
       (let [[node product] (peek stack)
             [gradients' stack'] (reduce (fn [[gs st] [child weight]]
-                                          ;;(println (:label node) "---" weight "--->" (:label child))
+                                          ;;(println (.label node) "---" weight "--->" (.label child))
                                           [(assoc gs child (+ (get gs child 0) (* product weight)))
                                            (conj st [child (* product weight)])])
                                         [gradients (pop stack)]
-                                        (:children node))]
+                                        (.children node))]
         (recur gradients' stack')))))
-
-;; Temp; for testing
-(defn -main
-  [& args]
-  (let [a (make-node 4 "a")
-        b (make-node 3 "b")
-        e (make-node 2 "e")
-        c (add a b)
-        d (mul a c)
-        f (mul b e)
-        g (add d f)
-        grads (differentiate g)]
-    (println (:value g))
-    (doseq [[node grad] grads]
-      (println (:label node) "\t" grad))))
