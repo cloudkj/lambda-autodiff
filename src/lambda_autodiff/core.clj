@@ -35,7 +35,7 @@
                     (map (fn [[child weight]] child))
                     (reduce conj (pop stack))))))))
 
-;; Operators
+;; Operations
 
 (defn add
   [a b]
@@ -55,6 +55,11 @@
   (make-node (math/pow (.value a) b)
               "pow"
               [[a (* b (math/pow (.value a) (- b 1)))]]))
+
+(defn exp
+  [a]
+  (let [out (math/exp (.value a))]
+    (make-node out "exp" [[a out]])))
 
 (defn tanh
   [a]
