@@ -1,16 +1,9 @@
-lambda-autodiff
+# lambda-autodiff
 
-Progression
+Reverse-mode automatic differentiation in Lisp (Clojure).
 
-Reverse-mode autodiff
+Progress -> goals:
 
-* Support scalar values, unary/binary ops
-* N-ary ops
-* Explict namespace for supported functions
-* Macros for overriding predefined primitive functions
-* Vectorization
-* Racket -> Clojure
-
-Ideas
-
-* Instruction level autodiff
+* Scalar values -> vectorized, non-broadcasted values
+* Explict namespace for supported functions -> macros for overriding predefined primitive functions
+* -> Integration with neural networks API in https://github.com/cloudkj/lambda-ml
