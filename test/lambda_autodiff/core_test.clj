@@ -54,3 +54,15 @@
     (is (< (abs (- 0.0285 (.value L))) 1e-4))
     (is (< (abs (- -0.0067 (get grads w))) 1e-4))
     (is (< (abs (- -0.0540 (get grads b))) 1e-4))))
+
+(deftest test4
+  "Source: https://justindomke.wordpress.com/2009/02/17/automatic-differentiation-the-most-criminally-underused-tool-in-the-potential-machine-learning-toolbox/"
+  (let [x (make-node 2.71 'x')
+        y (loop [i 0
+                 y x]
+            (if (= i 100)
+              y
+              (recur (inc i) (sin (add x y)))))
+        grads (differentiate y)]
+    (is (< (abs (- 0.2465 (.value y))) 1e-4))
+    (is (< (abs (- -0.2050 (get grads x))) 1e-4))))

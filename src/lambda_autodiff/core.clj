@@ -1,8 +1,9 @@
 (ns lambda-autodiff.core
   (:require [clojure.math :as math]))
 
-;; Custom type to represent a node in the computational graph. Each node instance is a unique entity, independent of
-;; underlying values. We use a custom type as workaround for Clojure default value-based equality/hashing behavior.
+;; Custom type to represent a node in the computational graph. Each node instance is a unique
+;; entity, independent of underlying values. We use a custom type as workaround for Clojure
+;;  default value-based equality/hashing behavior."
 (deftype Node [value label children]
   Object
   (toString [node]
@@ -18,22 +19,6 @@
    (make-node value label []))
   ([value label children]
    (Node. value label children)))
-
-(defn make-graphviz-dot
-  "Generates the computational graph starting at a node in Graphviz DOT format"
-  [root]
-  (loop [dot (str "digraph G {\n")
-         stack (list root)]
-    (if (empty? stack)
-      (str dot "}")
-      (let [node (peek stack)
-            dot' (str dot (format "%s [label=\"%s\"];\n" (hash node) (str node)))]
-        (recur (->> (.children node)
-                    (map (fn [[child weight]] (format "%s -> %s [label=\"%s\"];\n" (hash node) (hash child) weight)))
-                    (reduce str dot'))
-               (->> (.children node)
-                    (map (fn [[child weight]] child))
-                    (reduce conj (pop stack))))))))
 
 ;; Operations
 
@@ -60,6 +45,10 @@
   [a]
   (let [out (math/exp (.value a))]
     (make-node out "exp" [[a out]])))
+
+(defn sin
+  [a]
+  (make-node (math/sin (.value a)) "sin" [[a (math/cos (.value a))]]))
 
 (defn tanh
   [a]
@@ -95,15 +84,31 @@
     (if (empty? stack)
       gradients
       (let [[node partial] (peek stack)]
-        (recur (->> (.children node)
-                    (map (fn [[child local]]
-                      [child
-                       ;; Accumulating gradients for each child is application of multivariate chain rule
-                       (+ (get gradients child 0)
-                          ;; Partial * local is application of chain rule along the path from root node
-                          (* partial local))]))
-                    (into gradients))
+        (recur (reduce (fn [gs [child local]]
+                         (assoc gs child
+                           ;; Accumulate gradients for each child to apply multivariate chain rule
+                           (+ (get gs child 0)
+                              ;; Update with `partial*local` to apply chain rule along path from root node to child
+                              (* partial local))))
+                       gradients
+                       (.children node))
                ;; Push all child nodes onto stack and update product of local derivatives from root to child thus far
                (->> (.children node)
                     (map (fn [[child local]] [child (* partial local)]))
+                    (reduce conj (pop stack))))))))
+
+(defn make-graphviz-dot
+  "Generates the computational graph starting at a node in Graphviz DOT format"
+  [root]
+  (loop [dot (str "digraph G {\n")
+         stack (list root)]
+    (if (empty? stack)
+      (str dot "}")
+      (let [node (peek stack)
+            dot' (str dot (format "%s [label=\"%s\"];\n" (hash node) (str node)))]
+        (recur (->> (.children node)
+                    (map (fn [[child weight]] (format "%s -> %s [label=\"%s\"];\n" (hash node) (hash child) weight)))
+                    (reduce str dot'))
+               (->> (.children node)
+                    (map (fn [[child weight]] child))
                     (reduce conj (pop stack))))))))
