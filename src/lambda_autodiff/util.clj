@@ -21,3 +21,19 @@
     (if (not (every? true? (map #(or (= %1 %2) (= %1 1) (= %2 1)) s t)))
         [] ;; Not broadcastable
         (keep-indexed #(if (= %2 1) %1) s))))
+
+(defn make-graphviz-dot
+  "Generates the computational graph starting at a node in Graphviz DOT format"
+  [root]
+  (loop [dot (str "digraph G {\n")
+         stack (list root)]
+    (if (empty? stack)
+      (str dot "}")
+      (let [node (peek stack)
+            dot' (str dot (format "%s [label=\"%s\"];\n" (hash node) (str node)))]
+        (recur (->> (.children node)
+                    (map (fn [[child weight]] (format "%s -> %s [label=\"%s\"];\n" (hash node) (hash child) weight)))
+                    (reduce str dot'))
+               (->> (.children node)
+                    (map (fn [[child weight]] child))
+                    (reduce conj (pop stack))))))))
