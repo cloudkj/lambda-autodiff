@@ -14,17 +14,47 @@
 
 (deftest test-mul-broadcast
   (let [a (make-node [[[-2] [1] [3] [0]]])
-        b (make-node [
-            [[[1] [2] [3] [4]]]
-            [[[1] [2] [3] [4]]]
-        ])
+        b (make-node [[[[1] [2] [3] [4]]]
+                      [[[1] [2] [3] [4]]]])
         c (mul a b)
         grads (differentiate c)]
     (is (= [[[[-2] [2] [9] [0]]] [[[-2] [2] [9] [0]]]] (.value c)))
     (is (= [[[2] [4] [6] [8]]] (get grads a)))
     (is (= [[[[-2] [1] [3] [0]]] [[[-2] [1] [3] [0]]]] (get grads b)))))
 
-;; Source: https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html
+(deftest test-mul
+  (let [a1 (make-node [1 2 3])
+        b1 (make-node [4 5 6])
+        c1 (mmul a1 b1)
+        a2 (make-node [[1 2 3] [-1 0 1]])
+        b2 (make-node [[4 1] [1 5] [6 6]])
+        c2 (mmul a2 b2)]
+    (is (= 32.0 (.value c1)))
+    (is (= [4 5 6] (-> (differentiate c1) (get a1))))
+    (is (= [1 2 3] (-> (differentiate c1) (get b1))))
+    (is (= [[24.0 29.0] [2.0 5.0]] (.value c2)))
+    (is (= [[5 6 12] [5 6 12]] (-> (differentiate c2) (get a2))))
+    (is (= [[0.0 0.0] [2.0 2.0] [4.0 4.0]] (-> (differentiate c2) (get b2))))))
+
+(deftest test-sum
+  (let [a (make-node [[1 2]])
+        b (make-node [[2 -1 15] [-1 0 1]])
+        c1 (add a (sum a))
+        c2 (add a (sum b))
+        c3 (mul a (sum b))
+        c4 (mul (sum b) b)]
+    (is (= [[4 5]] (.value c1)))
+    (is (= [[3 3]] (-> (differentiate c1) (get a))))
+    (is (= [[17 18]] (.value c2)))
+    (is (= [[1 1]] (-> (differentiate c2) (get a))))
+    (is (= [[2 2 2] [2 2 2]] (-> (differentiate c2) (get b))))
+    (is (= [[16 32]] (.value c3)))
+    (is (= [[16 16]] (-> (differentiate c3) (get a))))
+    (is (= [[3 3 3] [3 3 3]] (-> (differentiate c3) (get b))))
+    (is (= [[32 -16 240] [-16 0 16]] (.value c4)))
+    (is (= [[32 32 32] [32 32 32]] (-> (differentiate c4) (get b))))))
+
+;; Adapted from: https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html
 (deftest test0
   (let [x (make-node [0.52 1.12 0.77])
         y (make-node 1)
@@ -39,7 +69,7 @@
     (is (every? #(< % 1e-4) (m/abs (m/sub [-0.2408 -0.5186 -0.3566] (get grads w)))))
     (is (every? #(< % 1e-4) (m/abs (m/sub [-0.4631] (get grads b)))))))
 
-;; Source: https://github.com/karpathy/micrograd/blob/master/test/test_engine.py
+;; Adapted from: https://github.com/karpathy/micrograd/blob/master/test/test_engine.py
 (deftest test1
   (let [x (make-node -4)
         z (add (add (mul (make-node 2) x) (make-node 2)) x)
@@ -104,7 +134,7 @@
     (is (every? #(< % 1e-4) (m/abs (m/sub [-6.9417 -168.0 -46.9998] (get grads e)))))
     (is (every? #(< % 1e-4) (m/abs (m/sub [0.4958 0.5 0.5] (get grads f)))))))
 
-;; Source: https://www.cs.toronto.edu/~rgrosse/courses/csc321_2018/slides/lec10.pdf
+;; Adapted from: https://www.cs.toronto.edu/~rgrosse/courses/csc321_2018/slides/lec10.pdf
 (deftest test3
   (let [x (make-node 0.12345)
         w (make-node 3.14)
@@ -141,7 +171,7 @@
     (is (every? #(< % 1e-4) (m/abs (m/sub [-0.0062 -0.0048 0.0269 0.0 0.2454] (get grads w)))))
     (is (every? #(< % 1e-4) (m/abs (m/sub [-1.6909] (get grads b)))))))
 
-;; Source: https://justindomke.wordpress.com/2009/02/17/automatic-differentiation-the-most-criminally-underused-tool-in-the-potential-machine-learning-toolbox/
+;; Adapted from: https://justindomke.wordpress.com/2009/02/17/automatic-differentiation-the-most-criminally-underused-tool-in-the-potential-machine-learning-toolbox/
 (deftest test4
   (let [x (make-node 2.71)
         y (loop [i 0
