@@ -1,6 +1,5 @@
 (ns lambda-autodiff.core
-  (:require [clojure.math :as math]
-            [clojure.core.matrix :as m]
+  (:require [clojure.core.matrix :as m]
             [lambda-autodiff.util :as util]))
 
 ;; Custom type to represent a node in the computational graph. Each node instance is a unique
@@ -28,51 +27,65 @@
   [a b]
   (make-node (m/add (.value a) (.value b))
              "+"
-             [[a 1] [b 1]]))
+             [[a identity] [b identity]]))
 
 (defn mul
   [a b]
   (make-node (m/mul (.value a) (.value b))
              "*"
-             [[a (.value b)] [b (.value a)]]))
+             [[a (fn [upstream] (m/mul upstream (.value b)))]
+              [b (fn [upstream] (m/mul upstream (.value a)))]]))
+
+(defn mmul
+  [a b]
+  (make-node (m/mmul (.value a) (.value b))
+             "mmul"
+             [[a (fn [upstream] (m/mmul upstream (m/transpose (.value b))))]
+              [b (fn [upstream] (m/mmul (m/transpose (.value a)) upstream))]]))
+
+(defn transpose
+  [a]
+  (make-node (m/transpose (.value a))
+             "T"
+             [[a (fn [upstream] (m/transpose upstream))]]))
 
 (defn sum
   [a]
   (make-node (m/esum (.value a))
              "sum"
-             [[a (m/fill (m/new-array (m/shape (.value a))) 1)]]))
+             [[a (fn [upstream] (m/broadcast (m/esum upstream) (m/shape (.value a))))]]))
 
 (defn pow
   [a exponent]
   ;; TODO: add restriction that `exponent` is scalar only and not another node
   (make-node (m/pow (.value a) exponent)
              "pow"
-             [[a (m/mul exponent (m/pow (.value a) (- exponent 1)))]]))
+             [[a (fn [upstream] (m/mul upstream (m/mul exponent (m/pow (.value a) (- exponent 1)))))]]))
 
 (defn exp
   [a]
   (let [out (m/exp (.value a))]
-    (make-node out "exp" [[a out]])))
+    (make-node out "exp" [[a (fn [upstream] (m/mul upstream out))]])))
 
 (defn log
   [a]
-  (make-node (m/log (.value a)) "log" [[a (m/div 1 (.value a))]]))
+  (make-node (m/log (.value a)) "log" [[a (fn [upstream] (m/mul upstream (m/div 1 (.value a))))]]))
 
 (defn sin
   [a]
-  (make-node (m/sin (.value a)) "sin" [[a (m/cos (.value a))]]))
+  (make-node (m/sin (.value a)) "sin" [[a (fn [upstream] (m/mul upstream (m/cos (.value a))))]]))
 
 (defn tanh
   [a]
   (let [out (m/div (m/sub (m/exp (m/mul 2 (.value a))) 1)
                    (m/add (m/exp (m/mul 2 (.value a))) 1))]
-    (make-node out "tanh" [[a (m/sub 1 (m/square out))]])))
+    (make-node out "tanh" [[a (fn [upstream] (m/mul upstream (m/sub 1 (m/square out))))]])))
 
 (defn relu
   [a]
   (make-node (m/emap #(if (> % 0) % 0) (.value a))
              "relu"
-             [[a (m/emap #(if (> % 0) 1 0) (.value a))]]))
+             [[a (fn [upstream] (m/mul upstream (m/emap #(if (> % 0) 1 0) (.value a))))]]))
 
 (defn div
   [a b]
@@ -95,17 +108,25 @@
          ;; Reshape base derivative to match root output shape
          stack (list [root (m/fill (m/new-array (m/shape (.value root))) 1)])]
     (if (empty? stack)
-      gradients
+      ;; Post-process gradients at the end of accumulation to account for
+      ;; different shapes
+      (->> gradients
+           (map (fn [[c g]]
+                  [c
+                   ;; If child shape is smaller than gradient shape, sum gradient
+                   ;; along axes that would be expanded during broadcasting
+                   (cond (< (m/ecount (.value c)) (m/ecount g))
+                         (->> (util/broadcast-axes (m/shape (.value c)) (m/shape g))
+                              (util/asum g))
+                         ;; If child shape is larger than gradient shape, broadcast
+                         ;; gradient to match child shape
+                         (> (m/ecount (.value c)) (m/ecount g))
+                         (m/broadcast g (m/shape (.value c)))
+                         :else g)]))
+           (into {}))
       (let [[node upstream] (peek stack)
-             children (map (fn [[child local]]
-                             (let [child-shape (m/shape (.value child))
-                                   ;; Update with `upstream*local` to apply chain rule along path from root to child
-                                   update (m/mul upstream local)
-                                   axes (util/broadcast-axes child-shape (m/shape (.value node)))]
-                               ;; Account for broadcasting by determining axes to sum updated partial derivative
-                               ;; based on child shape with relation to shape of upstream derivative
-                               [child (-> update (util/asum axes) (m/reshape child-shape))]))
-                           (.children node))]
+            ;; Apply chain rule along path from root to child with update function
+            children (map (fn [[child update]] [child (update upstream)]) (.children node))]
         (recur (reduce (fn [gs [child downstream]]
                          ;; Accumulate gradients for each child to apply multivariate chain rule
                          (assoc gs child (m/add (get gs child 0) downstream)))
