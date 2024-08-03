@@ -1,6 +1,8 @@
 (ns lambda-autodiff.util
   (:require [clojure.core.matrix :as m]))
 
+;; Matrix utils
+
 (defn asum
   "Calculates sum of numerical array elements over the given axes"
   [a axes]
@@ -22,3 +24,32 @@
         [] ;; Not broadcastable
         (->> (map vector s t)
              (keep-indexed #(if (> (second %2) (first %2)) %1))))))
+
+;; Graph utils
+
+(defn make-graphviz-dot
+  "Generates the computational graph starting at a node in Graphviz DOT format"
+  [root]
+  (loop [dot (str "digraph G {\n")
+         stack (list root)]
+    (if (empty? stack)
+      (str dot "}")
+      (let [node (peek stack)
+            dot' (str dot (format "%s [label=\"%s\"];\n" (hash node) (str node)))]
+        (recur (->> (.children node)
+                    (map (fn [[child weight]] (format "%s -> %s [label=\"%s\"];\n" (hash node) (hash child) weight)))
+                    (reduce str dot'))
+               (->> (.children node)
+                    (map (fn [[child _]] child))
+                    (reduce conj (pop stack))))))))
+
+(defn count-graph
+  "Counts number of nodes in graph starting at a given node"
+  [root]
+  (loop [stack (list root)
+         result 0]
+    (if (empty? stack)
+      result
+      (let [node (peek stack)]
+        (recur (->> (.children node) (map first) (reduce conj (pop stack)))
+               (+ result 1))))))
