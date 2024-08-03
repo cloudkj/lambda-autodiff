@@ -20,4 +20,5 @@
         t (if (> d 0) (vec (concat (repeat d 1) t)) t)]
     (if (not (every? true? (map #(or (= %1 %2) (= %1 1) (= %2 1)) s t)))
         [] ;; Not broadcastable
-        (keep-indexed #(if (= %2 1) %1) s))))
+        (->> (map vector s t)
+             (keep-indexed #(if (> (second %2) (first %2)) %1))))))
