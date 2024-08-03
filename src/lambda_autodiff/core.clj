@@ -4,7 +4,7 @@
 
 ;; Custom type to represent a node in the computational graph. Each node instance is a unique
 ;; entity, independent of underlying values. We use a custom type as workaround for Clojure
-;; default value-based equality/hashing behavior."
+;; default value-based equality and hashing behavior.
 (deftype Node [value label children]
   Object
   (toString [node]
@@ -57,7 +57,7 @@
 
 (defn pow
   [a exponent]
-  ;; TODO: add restriction that `exponent` is scalar-only and not another node
+  ;; TODO: add restriction that `exponent` is scalar only and not another node
   (make-node (m/pow (.value a) exponent)
              "pow"
              [[a (fn [upstream] (m/mul upstream (m/mul exponent (m/pow (.value a) (- exponent 1)))))]]))
@@ -134,30 +134,3 @@
                        children)
                ;; Push all child nodes onto stack and pass derivatives, from root to child thus far, downstream
                (reduce conj (pop stack) children))))))
-
-(defn make-graphviz-dot
-  "Generates the computational graph starting at a node in Graphviz DOT format"
-  [root]
-  (loop [dot (str "digraph G {\n")
-         stack (list root)]
-    (if (empty? stack)
-      (str dot "}")
-      (let [node (peek stack)
-            dot' (str dot (format "%s [label=\"%s\"];\n" (hash node) (str node)))]
-        (recur (->> (.children node)
-                    (map (fn [[child weight]] (format "%s -> %s [label=\"%s\"];\n" (hash node) (hash child) weight)))
-                    (reduce str dot'))
-               (->> (.children node)
-                    (map (fn [[child _]] child))
-                    (reduce conj (pop stack))))))))
-
-(defn count-graph
-  "Counts number of nodes in graph starting at a given node"
-  [root]
-  (loop [stack (list root)
-         result 0]
-    (if (empty? stack)
-      result
-      (let [node (peek stack)]
-        (recur (->> (.children node) (map first) (reduce conj (pop stack)))
-               (+ result 1))))))
