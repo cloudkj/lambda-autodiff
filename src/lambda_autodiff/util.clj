@@ -1,6 +1,8 @@
 (ns lambda-autodiff.util
   (:require [clojure.core.matrix :as m]))
 
+;; Matrix utils
+
 (defn asum
   "Calculates sum of numerical array elements over the given axes"
   [a axes]
@@ -22,6 +24,8 @@
         [] ;; Not broadcastable
         (->> (map vector s t)
              (keep-indexed #(if (> (second %2) (first %2)) %1))))))
+
+;; Graph utils
 
 (defn make-graphviz-dot
   "Generates the computational graph starting at a node in Graphviz DOT format"
