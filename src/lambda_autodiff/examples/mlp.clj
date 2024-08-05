@@ -1,12 +1,14 @@
-(ns lambda-autodiff.examples.mlp-demo
+(ns lambda-autodiff.examples.mlp
   (:require [clojure.core.matrix :as m]
             [clojure.core.matrix.random :as mr]
             [lambda-autodiff.core :refer :all]
             [nextjournal.clerk :as clerk]))
 
-;; MLP demo modeled after https://github.com/karpathy/micrograd/blob/master/demo.ipynb
-
-;; ## Dataset
+;; # MLP demo
+;;
+;; Adapted from https://github.com/karpathy/micrograd/blob/master/demo.ipynb
+;;
+;; ### Dataset
 
 ^{:nextjournal.clerk/visibility {:code :fold :result :hide}}
 (def xs (make-node [[4.83751667e-01,  8.56774435e-01],
@@ -125,7 +127,9 @@
                       :color {:field "y" :type "nominal"}}
            :mark "point"})
 
-;; ## Model
+;; ### Model
+;;
+;; Define weights and biases:
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
 (def w1 (make-node (mr/sample-normal [16 2])))
@@ -151,19 +155,20 @@
      (map m/ecount)
      (reduce +))
 
-;; ## Optimization
+;; ### Optimization
 
-(def alpha 0.1)
+(def iters 100)
 
 (def results
-  (loop [iters 50
+  (loop [i 0
          progress []
          w1 w1 b1 b1 w2 w2 b2 b2 w3 w3 b3 b3]
-    (if (> iters 0)
-      (let [;; Forward pass
-            a1 (tanh (add (transpose (inner w1 (transpose xs))) b1))
-            a2 (tanh (add (transpose (inner w2 (transpose a1))) b2))
-            out (tanh (add (transpose (inner w3 (transpose a2))) b3))
+    (if (< i iters)
+      (let [learning-rate (- 1.0 (* 0.9 (/ i 100)))
+            ;; Forward pass
+            a1 (tanh (add (transpose (mmul w1 (transpose xs))) b1))
+            a2 (tanh (add (transpose (mmul w2 (transpose a1))) b2))
+            out (tanh (add (transpose (mmul w3 (transpose a2))) b3))
             ;; Loss function
             losses (relu (add (make-node 1) (mul (neg ys) (transpose out))))
             dataloss (div (sum losses) (make-node (m/ecount (.value losses))))
@@ -172,30 +177,63 @@
                          (reduce add)
                          (mul (make-node 1e-4)))
             loss (add dataloss regloss)
-          ;; Backward pass
+            ;; Backward pass
             grads (differentiate loss)
-          ;; Accuracy
+            ;; Accuracy
             accuracy (map #(if (= (> %1 0) (> %2 0)) 1 0) (.value ys) (m/to-vector (.value out)))]
-        (recur (- iters 1)
-               (conj progress {:loss (.value loss) :accuracy (float (/ (reduce + accuracy) (count accuracy)))})
-               (make-node (m/sub (.value w1) (m/mul alpha (get grads w1))))
-               (make-node (m/sub (.value b1) (m/mul alpha (get grads b1))))
-               (make-node (m/sub (.value w2) (m/mul alpha (get grads w2))))
-               (make-node (m/sub (.value b2) (m/mul alpha (get grads b2))))
-               (make-node (m/sub (.value w3) (m/mul alpha (get grads w3))))
-               (make-node (m/sub (.value b3) (m/mul alpha (get grads b3))))))
-      progress)))
+        (recur (inc i)
+               (conj progress
+                     {:loss (.value loss)
+                      :learning-rate learning-rate
+                      :accuracy (float (/ (reduce + accuracy) (count accuracy)))})
+               (make-node (m/sub (.value w1) (m/mul learning-rate (get grads w1))))
+               (make-node (m/sub (.value b1) (m/mul learning-rate (get grads b1))))
+               (make-node (m/sub (.value w2) (m/mul learning-rate (get grads w2))))
+               (make-node (m/sub (.value b2) (m/mul learning-rate (get grads b2))))
+               (make-node (m/sub (.value w3) (m/mul learning-rate (get grads w3))))
+               (make-node (m/sub (.value b3) (m/mul learning-rate (get grads b3))))))
+      {:progress progress
+       :params [w1 b1 w2 b2 w3 b3]})))
 
-(clerk/vl {:data {:values (map-indexed (fn [i p] (conj p {:iter i})) results)}
+;; ### Visualization
+
+(clerk/vl {:data {:values (map-indexed (fn [i p] (conj p {:iter i})) (:progress results))}
            :width 600 :height 400
            :encoding {:x {:field "iter" :type "quantitative"}}
-           :layer [
-                   {:mark "line" :encoding {:y {:field "loss" :type "quantitative"}}}
-                   {:mark "line" :encoding {:y {:field "accuracy" :type "quantitative"}}}]
-               
+           :layer [{:mark "line" :encoding {:color {:value "#1f77b4"} :y {:field "loss" :type "quantitative"}}}
+                   {:mark "line" :encoding {:color {:value "#ff7f0e"} :y {:field "accuracy" :type "quantitative"}}}]
            :resolve {:scale {:y "independent"}}})
 
-;; ## Visualization
+;; Plot decision boundary:
 
-;; Plot decision boundary
-
+(let [step 0.05
+      [xmin xmax] ((juxt #(apply min %) #(apply max %)) (map first (.value xs)))
+      [ymin ymax] ((juxt #(apply min %) #(apply max %)) (map second (.value xs)))
+      xrange (range (- xmin (* 2 step)) (+ xmax (* 2 step)) step)
+      yrange (range (- ymin (* 2 step)) (+ ymax (* 2 step)) step)
+      [w1 b1 w2 b2 w3 b3] (:params results)
+      mesh-xs (make-node (for [x2 yrange x1 xrange] [x1 x2]))
+      a1 (tanh (add (transpose (mmul w1 (transpose mesh-xs))) b1))
+      a2 (tanh (add (transpose (mmul w2 (transpose a1))) b2))
+      out (tanh (add (transpose (mmul w3 (transpose a2))) b3))
+      pos (->> (map vector (.value xs) (.value ys))
+               (filter (fn [[_ y]] (> y 0)))
+               (map first))
+      neg (->> (map vector (.value xs) (.value ys))
+               (filter (fn [[_ y]] (<= y 0)))
+               (map first))]
+  (clerk/plotly
+   {:data [{:z (partition (count xrange) (m/as-vector (.value out)))
+            :x xrange
+            :y yrange
+            :type "heatmap"}
+           {:x (map first pos)
+            :y (map second pos)
+            :mode "markers"
+            :type "scatter"
+            :name "y = 1"}
+           {:x (map first neg)
+            :y (map second neg)
+            :mode "markers"
+            :type "scatter"
+            :name "y = -1"}]}))
