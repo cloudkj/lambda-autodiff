@@ -43,6 +43,12 @@
              [[a (fn [upstream] (m/mmul upstream (m/transpose (.value b))))]
               [b (fn [upstream] (m/mmul (m/transpose (.value a)) upstream))]]))
 
+(defn reshape
+  [a shape]
+  (make-node (m/reshape (.value a) shape)
+             "reshape"
+             [[a (fn [upstream] (m/reshape upstream (m/shape (.value a))))]]))
+
 (defn transpose
   [a]
   (make-node (m/transpose (.value a))
@@ -99,7 +105,7 @@
   [a b]
   (add a (neg b)))
 
-;; API
+;; Differentiation
 
 (defn differentiate
   "Returns a map of nodes to partial derivative values"
@@ -108,8 +114,7 @@
          ;; Reshape base derivative to match root output shape
          stack (list [root (m/fill (m/new-array (m/shape (.value root))) 1)])]
     (if (empty? stack)
-      ;; Post-process gradients at the end of accumulation to account for
-      ;; different shapes
+      ;; Post-process gradients at the end of accumulation to account for different shapes
       (->> gradients
            (map (fn [[c g]]
                   [c

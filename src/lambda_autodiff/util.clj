@@ -1,6 +1,18 @@
 (ns lambda-autodiff.util
   (:require [clojure.core.matrix :as m]))
 
+(defn choose
+  "Given a probability distribution, sample from the distribution and return the selected index"
+  [probs]
+  (let [cdf (reduce (fn [cdf p] (conj cdf (+ (last cdf) p))) [0] probs) ;; Convert probabilities into CDF
+        ranges (partition 2 1 cdf)] ;; Convert into pairs of [lower, upper] prbability ranges
+    ;; Generate a random number within [0, 1] then search for and return the index of the corresponding number
+    (java.util.Collections/binarySearch ranges
+                                        (rand)
+                                        (fn [r e] (cond (< e (first r)) 1
+                                                        (> e (second r)) -1
+                                                        :else 0)))))
+
 ;; Matrix utils
 
 (defn asum
@@ -24,6 +36,49 @@
         [] ;; Not broadcastable
         (->> (map vector s t)
              (keep-indexed #(if (> (second %2) (first %2)) %1))))))
+
+;; TODO: can be replaced with core.matrix/clamp
+(defn clamp
+  "Clamp all elements within an array to be within the range `[lo, hi]`"
+  [a lo hi]
+  (m/emap (fn [e] (cond (< e lo) lo
+                        (> e hi) hi
+                        :else e))
+          a))
+
+(defn dimension-max
+  "Returns the maximum value with an array along a dimension"
+  [a dim]
+  (let [shape (m/shape a)
+        ;; Helper to increment seq of indexes for all dimensions while staying in bounds of input shape
+        inc-ranges (fn [ranges]
+                     (loop [dim (- (count ranges) 1)
+                            ranges ranges]
+                       (cond (< dim 0) nil ;; No more dimensions to increment
+                             (nil? (nth ranges dim)) (recur (dec dim) ranges) ;; Skip dimension
+                             ;; Increment index for dimension when still within bounds
+                             (< (nth ranges dim) (dec (nth shape dim))) (assoc ranges dim (inc (nth ranges dim)))
+                             ;; Reset index and try to increment index for next dimension
+                             :else (recur (dec dim) (assoc ranges dim 0)))))]
+    (loop [indexes []
+           values []
+           ;; Ranges to take subarrays: start at index 0 for every dimension except the one over which we're taking max
+           ranges (assoc (vec (repeat (m/dimensionality a) 0)) dim nil)]
+      (if (nil? ranges)
+        ;; Output is the same shape as input with given dimension dropped
+        (-> (keep-indexed #(when (not (= %1 dim)) %2) shape)
+            (m/zero-array)
+            (m/set-indices indexes values))
+        ;; Add length=1 to every index range in order to take subarray
+        (let [slice (m/submatrix a (map (fn [e] (if (nil? e) e [e 1])) ranges))]
+          (recur (conj indexes (filter #(not (nil? %)) ranges))
+                 (conj values (m/emax slice)) ;; TODO: also need to handle argmax
+                 (inc-ranges ranges)))))))
+
+(defn one-hot
+  "Returns an n x 1 array with element at index i set to one"
+  [n i]
+  (m/mset (m/zero-array [n 1]) i 0 1.0))
 
 ;; Graph utils
 
