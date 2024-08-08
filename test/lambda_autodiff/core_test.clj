@@ -54,6 +54,15 @@
     (is (= [[32 -16 240] [-16 0 16]] (.value c4)))
     (is (= [[32 32 32] [32 32 32]] (-> (differentiate c4) (get b))))))
 
+(deftest test-grad-shape
+  (let [x (make-node [[1 2 3 4]])
+        w (make-node [[1 2] [3 4] [5 6] [7 8]])
+        b (make-node [-1 1])
+        c (add (mmul x w) b)
+        grads (differentiate c)]
+    (is (= [4 2] (m/shape (get grads w))))
+    (is (= [2] (m/shape (get grads b))))))
+
 ;; Adapted from: https://jax.readthedocs.io/en/latest/notebooks/autodiff_cookbook.html
 (deftest test0
   (let [x (make-node [0.52 1.12 0.77])
