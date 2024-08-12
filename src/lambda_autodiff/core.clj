@@ -40,8 +40,8 @@
   [a b]
   (make-node (m/mmul (.value a) (.value b))
              "mmul"
-             [[a (fn [upstream] (m/mmul upstream (m/transpose (.value b))))]
-              [b (fn [upstream] (m/mmul (m/transpose (.value a)) upstream))]]))
+             [[a (fn [upstream] (util/batch-mmul upstream (util/swap-last-dims (.value b))))]
+              [b (fn [upstream] (util/batch-mmul (util/swap-last-dims (.value a)) upstream))]]))
 
 (defn reshape
   [a shape]
@@ -118,16 +118,16 @@
       (->> gradients
            (map (fn [[c g]]
                   [c
-                   ;; If child shape is smaller than gradient shape, sum gradient
-                   ;; along axes that would be expanded during broadcasting
+                   ;; If child shape is smaller than gradient shape, sum gradient along axes that would be expanded during broadcasting
                    (cond (< (m/ecount (.value c)) (m/ecount g))
                          (->> (util/broadcast-axes (m/shape (.value c)) (m/shape g))
                               (util/asum g))
-                         ;; If child shape is larger than gradient shape, broadcast
-                         ;; gradient to match child shape
+                         ;; If child shape is larger than gradient shape, broadcast gradient to match child shape
                          (> (m/ecount (.value c)) (m/ecount g))
                          (m/broadcast g (m/shape (.value c)))
                          :else g)]))
+           ;; Reshape gradient to match child shape if dimensionality unequal
+           (map (fn [[c g]] [c (if (not (= (m/dimensionality (.value c)) (m/dimensionality g))) (m/reshape g (m/shape (.value c))) g)]))
            (into {}))
       (let [[node upstream] (peek stack)
             ;; Apply chain rule along path from root to child with update function
