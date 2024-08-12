@@ -25,9 +25,7 @@
 
 (defn add
   [a b]
-  (make-node (m/add (.value a) (.value b))
-             "+"
-             [[a identity] [b identity]]))
+  (make-node (m/add (.value a) (.value b)) "+" [[a identity] [b identity]]))
 
 (defn mul
   [a b]
@@ -38,7 +36,7 @@
 
 (defn mmul
   [a b]
-  (make-node (m/mmul (.value a) (.value b))
+  (make-node (util/batch-mmul (.value a) (.value b))
              "mmul"
              [[a (fn [upstream] (util/batch-mmul upstream (util/swap-last-dims (.value b))))]
               [b (fn [upstream] (util/batch-mmul (util/swap-last-dims (.value a)) upstream))]]))
@@ -51,9 +49,7 @@
 
 (defn transpose
   [a]
-  (make-node (m/transpose (.value a))
-             "T"
-             [[a (fn [upstream] (m/transpose upstream))]]))
+  (make-node (m/transpose (.value a)) "T" [[a m/transpose]]))
 
 (defn sum
   [a]
@@ -95,15 +91,18 @@
 
 (defn div
   [a b]
-  (mul a (pow b -1)))
+  (make-node (m/div (.value a) (.value b))
+             "/"
+             [[a (fn [upstream] (m/div upstream (.value b)))]
+              [b (fn [upstream] (m/div (m/mul -1 upstream (.value a)) (m/square (.value b))))]]))
 
 (defn neg
   [a]
-  (mul a (make-node -1)))
+  (make-node (m/negate (.value a)) "-" [[a m/negate]]))
 
 (defn sub
   [a b]
-  (add a (neg b)))
+  (make-node (m/sub (.value a) (.value b)) "-" [[a identity] [b m/negate]]))
 
 ;; Differentiation
 

@@ -118,7 +118,7 @@
     (if (not (empty? data))
       (let [xs (map first (take batch-size data))
             ys (map second (take batch-size data))
-            ytargets (make-node (map (fn [y] (m/reshape (util/one-hot 10 y) [10])) ys))
+            ytargets (make-node (map (fn [y] (util/one-hot 10 y)) ys))
             batch-size (min batch-size (count xs)) ;; Clamp batch-size based on actual number of examples 
             ;; Convolution
             input (make-node (m/reshape xs [batch-size channels image-size image-size]))

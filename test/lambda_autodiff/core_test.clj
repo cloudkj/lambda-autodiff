@@ -22,7 +22,16 @@
     (is (= [[[2] [4] [6] [8]]] (get grads a)))
     (is (= [[[[-2] [1] [3] [0]]] [[[-2] [1] [3] [0]]]] (get grads b)))))
 
-(deftest test-mul
+(deftest test-div
+  (let [a (make-node [[1 -1 2] [2 6 0]])
+        b (make-node [[4 10 -2] [5 4 8]])
+        c (div a b)
+        grads (differentiate c)]
+    (is (m/e== [[0.25 -0.1 -1.0] [0.4 1.5 0.0]] (.value c)))
+    (is (m/e== [[0.25 0.1 -0.5] [0.2 0.25 0.125]] (get grads a)))
+    (is (m/e== [[-0.0625 0.01 -0.5] [-0.08 -0.375 0.0]] (get grads b)))))
+
+(deftest test-mmul
   (let [a1 (make-node [1 2 3])
         b1 (make-node [4 5 6])
         c1 (mmul a1 b1)
@@ -53,6 +62,22 @@
     (is (= [[3 3 3] [3 3 3]] (-> (differentiate c3) (get b))))
     (is (= [[32 -16 240] [-16 0 16]] (.value c4)))
     (is (= [[32 32 32] [32 32 32]] (-> (differentiate c4) (get b))))))
+
+(deftest test-neg
+  (let [a (make-node [[1.0 -2.0 9.0] [-3.0 4.0 0.0]])
+        b (neg a)
+        grads (differentiate b)]
+    (is (= [[-1.0 2.0 -9.0] [3.0 -4.0 0.0]] (.value b)))
+    (is (= [[-1.0 -1.0 -1.0] [-1.0 -1.0 -1.0]] (get grads a)))))
+
+(deftest test-sub
+  (let [a (make-node [[1 -1 2] [2 6 0]])
+        b (make-node [[4 10 -2] [5 4 8]])
+        c (sub a b)
+        grads (differentiate c)]
+    (is (m/e== [[-3 -11 4] [-3 2 -8]] (.value c)))
+    (is (m/e== [[1 1 1] [1 1 1]] (get grads a)))
+    (is (m/e== [[-1 -1 -1] [-1 -1 -1]] (get grads b)))))
 
 (deftest test-grad-shape
   (let [x (make-node [[1 2 3 4]])

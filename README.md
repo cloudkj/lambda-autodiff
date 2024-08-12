@@ -1,9 +1,16 @@
 # lambda-autodiff
 
-Reverse-mode automatic differentiation in Lisp (Clojure).
+Reverse-mode automatic differentiation in Clojure. Basic support for common
+vectorized operations on values of n-dimensional arrays. Also includes
+lightweight extensions to enable use cases for more certain neural network
+architectures.
 
-Progress -> goals:
+## Installation
 
-* Scalar values -> vectorized, non-broadcasted values
-* Explict namespace for supported functions -> macros for overriding predefined primitive functions
-* -> Integration with neural networks API in https://github.com/cloudkj/lambda-ml
+## Usage
+
+## Examples
+
+* Multi-layer perceptron
+* Character-level recurrent neural network (RNN)
+* Convolutional neural network (CNN) for MNIST digit recognition
