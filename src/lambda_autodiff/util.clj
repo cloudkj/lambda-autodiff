@@ -64,7 +64,6 @@
         (->> (map vector s t)
              (keep-indexed #(if (> (second %2) (first %2)) %1))))))
 
-;; TODO: can be replaced with core.matrix/clamp
 (defn clamp
   "Clamp all elements within an array to be within the range `[lo, hi]`"
   [a lo hi]
@@ -113,9 +112,9 @@
                   (inc-ranges ranges))))))))
 
 (defn one-hot
-  "Returns an n x 1 array with element at index i set to one"
+  "Returns an n-sized array with element at index i set to one"
   [n i]
-  (m/mset (m/zero-array [n 1]) i 0 1.0))
+  (m/mset (m/zero-array [n]) i 1.0))
 
 (defn swap-last-dims
   "Swaps the last two dimensions of an array"
@@ -147,12 +146,14 @@
                     (reduce conj (pop stack))))))))
 
 (defn count-graph
-  "Counts number of nodes in graph starting at a given node"
+  "Counts number of nodes and edges in the graph starting at a given node"
   [root]
   (loop [stack (list root)
-         result 0]
+         nodes #{}
+         edges 0]
     (if (empty? stack)
-      result
+      [(count nodes) edges]
       (let [node (peek stack)]
-        (recur (->> (.children node) (map first) (reduce conj (pop stack)))
-               (+ result 1))))))
+          (recur (->> (.children node) (map first) (reduce conj (pop stack)))
+                 (conj nodes node)
+                 (+ edges (count (.children node))))))))

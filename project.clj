@@ -7,5 +7,6 @@
                  [org.clojure/math.combinatorics "0.3.0"]
                  [net.mikera/core.matrix "0.63.0"]
                  [net.mikera/vectorz-clj "0.48.0"]
+                 [com.taoensso/nippy "3.4.2"]
                  [io.github.nextjournal/clerk "0.16.1016"]]
   :repl-options {:init-ns lambda-autodiff.core})

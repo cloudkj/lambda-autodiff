@@ -170,7 +170,7 @@
             a2 (tanh (add (transpose (mmul w2 (transpose a1))) b2))
             out (tanh (add (transpose (mmul w3 (transpose a2))) b3))
             ;; Loss function
-            losses (relu (add (make-node 1) (mul (neg ys) (transpose out))))
+            losses (relu (sub (make-node 1) (mul ys (transpose out))))
             dataloss (div (sum losses) (make-node (m/ecount (.value losses))))
             regloss (->> [w1 b1 w2 b2 w3 b3]
                          (map #(sum (mul % %)))
