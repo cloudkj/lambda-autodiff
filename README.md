@@ -2,7 +2,7 @@
 
 Reverse-mode automatic differentiation in Clojure. Basic support for common
 vectorized operations on values of n-dimensional arrays. Also includes
-lightweight extensions to enable use cases for more certain neural network
+lightweight extensions to enable use cases for specific neural network
 architectures.
 
 ## Installation
