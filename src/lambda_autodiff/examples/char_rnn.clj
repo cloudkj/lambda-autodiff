@@ -1,9 +1,8 @@
 (ns lambda-autodiff.examples.char-rnn
-  (:require [clojure.core.matrix :as m]
-            [clojure.core.matrix.random :as mr]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.math :as math]
             [lambda-autodiff.core :refer :all]
+            [lambda-autodiff.array :as ma]
             [lambda-autodiff.util :as util]
             [taoensso.nippy :as nippy]
             [nextjournal.clerk :as clerk]))
@@ -39,16 +38,14 @@
          indexes []]
     (if (>= t n)
       indexes
-      (let [x (make-node (m/reshape (util/one-hot (count vocab) index) [(count vocab) 1]))
+      (let [x (make-node (ma/reshape (ma/one-hot (count vocab) index) [(count vocab) 1]))
             h (tanh (add (mmul Wxh x) (add (mmul Whh hidden) bh)))
             y (add (mmul Why h) by)
             p (div (exp y) (sum (exp y)))
-            index (util/choose (m/as-vector (.value p)))]
+            index (util/choose (ma/flatten (.value p)))]
         (recur index (inc t) h (conj indexes index))))))
 
 ;; ### Hyperparameters
-
-(m/set-current-implementation :vectorz)
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
 (def seq-length 32)
@@ -79,48 +76,48 @@
                              (->> (.readAllBytes in)
                                   (nippy/thaw)
                                   (nippy/read-quarantined-serializable-object-unsafe!)))]
-          (println "Loaded:" filename "shape:" (m/shape deserialized))
+          (println "Loaded:" filename "shape:" (ma/shape deserialized))
           (recur (rest names) (assoc weights name deserialized)))))))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def Wxh (make-node (get model-weights "Wxh" (m/mul (mr/sample-normal [hidden-size (count vocab)]) 0.01))))
+(def Wxh (make-node (get model-weights "Wxh" (ma/mul (ma/sample-normal [hidden-size (count vocab)]) 0.01))))
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def Whh (make-node (get model-weights "Whh" (m/mul (mr/sample-normal [hidden-size hidden-size]) 0.01))))
+(def Whh (make-node (get model-weights "Whh" (ma/mul (ma/sample-normal [hidden-size hidden-size]) 0.01))))
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def Why (make-node (get model-weights "Why" (m/mul (mr/sample-normal [(count vocab) hidden-size]) 0.01))))
+(def Why (make-node (get model-weights "Why" (ma/mul (ma/sample-normal [(count vocab) hidden-size]) 0.01))))
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def bh (make-node (get model-weights "bh" (m/zero-array [hidden-size 1]))))
+(def bh (make-node (get model-weights "bh" (ma/zeros [hidden-size 1]))))
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def by (make-node (get model-weights "by" (m/zero-array [(count vocab) 1]))))
+(def by (make-node (get model-weights "by" (ma/zeros [(count vocab) 1]))))
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def hprev (make-node (get model-weights "hprev" (m/zero-array [hidden-size 1]))))
+(def hprev (make-node (get model-weights "hprev" (ma/zeros [hidden-size 1]))))
 
 ;; Parameter distribution:
 
 ^{:nextjournal.clerk/visibility {:code :hide}}
-(clerk/row (clerk/plotly {:data [{:x (seq (m/to-vector (.value Wxh)))
+(clerk/row (clerk/plotly {:data [{:x (seq (ma/flatten (.value Wxh)))
                                   :name "Wxh"
                                   :type "histogram"}
-                                 {:x (seq (m/to-vector (.value Whh)))
+                                 {:x (seq (ma/flatten (.value Whh)))
                                   :name "Whh"
                                   :type "histogram"}
-                                 {:x (seq (m/to-vector (.value Why)))
+                                 {:x (seq (ma/flatten (.value Why)))
                                   :name "Why"
                                   :type "histogram"}]})
-           (clerk/plotly {:data [{:x (seq (m/to-vector (.value bh)))
+           (clerk/plotly {:data [{:x (seq (ma/flatten (.value bh)))
                                   :name "bh"
                                   :type "histogram"}
-                                 {:x (seq (m/to-vector (.value by)))
+                                 {:x (seq (ma/flatten (.value by)))
                                   :name "by"
                                   :type "histogram"}
-                                 {:x (seq (m/to-vector (.value hprev)))
+                                 {:x (seq (ma/flatten (.value hprev)))
                                   :name "hprev"
                                   :type "histogram"}]}))
 
 ^{:nextjournal.clerk/visibility {:code :hide}}
 (clerk/md (str "Total number of parameters: "
                (->> (map #(.value %) [Wxh Whh Why bh by])
-                    (map m/ecount)
+                    (map ma/count)
                     (reduce +))))
 
 ;; ### Optimization
@@ -133,15 +130,15 @@
          loss (make-node 0)]
     (if (>= t (count inputs))
       [loss hidden]
-      (let [x (make-node (m/reshape (util/one-hot (count vocab) (nth inputs t)) [(count vocab) 1]))
-            ytarget (make-node (m/reshape (util/one-hot (count vocab) (nth targets t)) [(count vocab) 1]))
+      (let [x (make-node (ma/reshape (ma/one-hot (count vocab) (nth inputs t)) [(count vocab) 1]))
+            ytarget (make-node (ma/reshape (ma/one-hot (count vocab) (nth targets t)) [(count vocab) 1]))
             h (tanh (add (mmul Wxh x) (add (mmul Whh hidden) bh)))
             y (add (mmul Why h) by)
             p (div (exp y) (sum (exp y)))
             l (neg (log (sum (mul p ytarget))))]
         (recur (+ t 1) h (add loss l))))))
 
-(def iters 10)
+(def iters 1)
 (def offset 207744)
 
 (def results
@@ -163,21 +160,21 @@
             smooth-loss (+ (* smooth-loss 0.999) (* (.value loss) 0.001))
             ;; Backward pass
             grads (differentiate loss)
-            [dWxh dWhh dWhy dbh dby] (map #(util/clamp (get grads %) -5 5) [Wxh Whh Why bh by])
+            [dWxh dWhh dWhy dbh dby] (map #(ma/clamp (get grads %) -5 5) [Wxh Whh Why bh by])
             ;; Timing
             end (java.lang.System/currentTimeMillis)
             elapsed (- end start)]
-        (if (= (mod n 100) 0)
+        (if (= (mod n 2) 0)
           (println "n:" n "p:" p "loss:" smooth-loss "actual loss:" (.value loss) "graph size:" (util/count-graph loss) "elapsed:" elapsed))
         ;;;;;;
         (recur (inc n)
                (+ p seq-length)
                end
-               (make-node (m/sub (.value Wxh) (m/mul learning-rate dWxh)))
-               (make-node (m/sub (.value Whh) (m/mul learning-rate dWhh)))
-               (make-node (m/sub (.value Why) (m/mul learning-rate dWhy)))
-               (make-node (m/sub (.value bh) (m/mul learning-rate dbh)))
-               (make-node (m/sub (.value by) (m/mul learning-rate dby)))
+               (make-node (ma/sub (.value Wxh) (ma/mul learning-rate dWxh)))
+               (make-node (ma/sub (.value Whh) (ma/mul learning-rate dWhh)))
+               (make-node (ma/sub (.value Why) (ma/mul learning-rate dWhy)))
+               (make-node (ma/sub (.value bh) (ma/mul learning-rate dbh)))
+               (make-node (ma/sub (.value by) (ma/mul learning-rate dby)))
                (make-node (.value hidden))
                (conj progress {:iter n
                                :offset p
@@ -226,6 +223,6 @@
         timestamp (.format (java.text.SimpleDateFormat. "yyyyMMdd_HHMMss") (new java.util.Date))]
     (doseq [[name params] (map vector ["Wxh" "Whh" "Why" "bh" "by" "hprev"] (:params results))]
       (let [filename (str "data/" model-name "_" name "_offset" offset "_iters" iters "_" timestamp ".dat")]
-        (println "Saving:" filename "shape:" (m/shape (.value params)))
+        (println "Saving:" filename "shape:" (ma/shape (.value params)))
         (with-open [out (io/output-stream filename)]
           (.write out (nippy/freeze (.value params))))))))
