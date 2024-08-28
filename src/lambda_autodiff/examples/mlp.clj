@@ -1,7 +1,6 @@
 (ns lambda-autodiff.examples.mlp
-  (:require [clojure.core.matrix :as m]
-            [clojure.core.matrix.random :as mr]
-            [lambda-autodiff.core :refer :all]
+  (:require [lambda-autodiff.core :refer :all]
+            [lambda-autodiff.array :as ma]
             [nextjournal.clerk :as clerk]))
 
 ;; # MLP demo
@@ -132,27 +131,27 @@
 ;; Define weights and biases:
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w1 (make-node (mr/sample-normal [16 2])))
+(def w1 (make-node (ma/sample-normal [16 2])))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b1 (make-node (mr/sample-normal [16])))
+(def b1 (make-node (ma/sample-normal [16])))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w2 (make-node (mr/sample-normal [16 16])))
+(def w2 (make-node (ma/sample-normal [16 16])))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b2 (make-node (mr/sample-normal [16])))
+(def b2 (make-node (ma/sample-normal [16])))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w3 (make-node (mr/sample-normal [1 16])))
+(def w3 (make-node (ma/sample-normal [1 16])))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b3 (make-node (mr/sample-normal [1])))
+(def b3 (make-node (ma/sample-normal [1])))
 
 ;; Total number of parameters:
 
 (->> (map #(.value %) [w1 b1 w2 b2 w3 b3])
-     (map m/ecount)
+     (map ma/count)
      (reduce +))
 
 ;; ### Optimization
@@ -171,7 +170,7 @@
             out (tanh (add (transpose (mmul w3 (transpose a2))) b3))
             ;; Loss function
             losses (relu (sub (make-node 1) (mul ys (transpose out))))
-            dataloss (div (sum losses) (make-node (m/ecount (.value losses))))
+            dataloss (div (sum losses) (make-node (ma/count (.value losses))))
             regloss (->> [w1 b1 w2 b2 w3 b3]
                          (map #(sum (mul % %)))
                          (reduce add)
@@ -180,18 +179,18 @@
             ;; Backward pass
             grads (differentiate loss)
             ;; Accuracy
-            accuracy (map #(if (= (> %1 0) (> %2 0)) 1 0) (.value ys) (m/to-vector (.value out)))]
+            accuracy (map #(if (= (> %1 0) (> %2 0)) 1 0) (.value ys) (ma/flatten (.value out)))]
         (recur (inc i)
                (conj progress
                      {:loss (.value loss)
                       :learning-rate learning-rate
                       :accuracy (float (/ (reduce + accuracy) (count accuracy)))})
-               (make-node (m/sub (.value w1) (m/mul learning-rate (get grads w1))))
-               (make-node (m/sub (.value b1) (m/mul learning-rate (get grads b1))))
-               (make-node (m/sub (.value w2) (m/mul learning-rate (get grads w2))))
-               (make-node (m/sub (.value b2) (m/mul learning-rate (get grads b2))))
-               (make-node (m/sub (.value w3) (m/mul learning-rate (get grads w3))))
-               (make-node (m/sub (.value b3) (m/mul learning-rate (get grads b3))))))
+               (make-node (ma/sub (.value w1) (ma/mul learning-rate (get grads w1))))
+               (make-node (ma/sub (.value b1) (ma/mul learning-rate (get grads b1))))
+               (make-node (ma/sub (.value w2) (ma/mul learning-rate (get grads w2))))
+               (make-node (ma/sub (.value b2) (ma/mul learning-rate (get grads b2))))
+               (make-node (ma/sub (.value w3) (ma/mul learning-rate (get grads w3))))
+               (make-node (ma/sub (.value b3) (ma/mul learning-rate (get grads b3))))))
       {:progress progress
        :params [w1 b1 w2 b2 w3 b3]})))
 
@@ -223,7 +222,7 @@
                (filter (fn [[_ y]] (<= y 0)))
                (map first))]
   (clerk/plotly
-   {:data [{:z (partition (count xrange) (m/as-vector (.value out)))
+   {:data [{:z (partition (count xrange) (ma/flatten (.value out)))
             :x xrange
             :y yrange
             :type "heatmap"}

@@ -1,9 +1,7 @@
 (ns lambda-autodiff.examples.cnn
-  (:require [clojure.core.matrix :as m]
-            [clojure.core.matrix.random :as mr]
-            [lambda-autodiff.core :refer :all]
+  (:require [lambda-autodiff.core :refer :all]
             [lambda-autodiff.ext :refer :all]
-            [lambda-autodiff.util :as util]
+            [lambda-autodiff.array :as ma]
             [nextjournal.clerk :as clerk])
   (:import [java.awt Color]
            [java.awt.image BufferedImage]))
@@ -52,13 +50,11 @@
 
 (->> (take 10 data)
      (map first)
-     (map #(m/reshape % [image-size image-size]))
+     (map #(ma/reshape % [image-size image-size]))
      (map pixels->image)
      (clerk/row))
 
 ;; ### Hyperparameters
-
-(m/set-current-implementation :vectorz)
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
 (def learning-rate 0.01)
@@ -77,9 +73,9 @@
 (def num-filters 32)
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w1 (make-node (m/mul (mr/sample-normal [num-filters channels filter-size filter-size]) 0.01) "w1"))
+(def w1 (make-node (ma/mul (ma/sample-normal [num-filters channels filter-size filter-size]) 0.01) "w1"))
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b1 (make-node (m/mul (mr/sample-normal [num-filters]) 0.01) "b1"))
+(def b1 (make-node (ma/mul (ma/sample-normal [num-filters]) 0.01) "b1"))
 
 ;; ##### Pool layer
 
@@ -92,25 +88,25 @@
 
 ;; TODO: compute flattened layer size from conv/pool parameters
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w2 (make-node (m/mul (mr/sample-normal [5408 100]) 0.01) "w2"))
+(def w2 (make-node (ma/mul (ma/sample-normal [5408 100]) 0.01) "w2"))
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b2 (make-node (m/mul (mr/sample-normal [100]) 0.01) "b2"))
+(def b2 (make-node (ma/mul (ma/sample-normal [100]) 0.01) "b2"))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w3 (make-node (mr/sample-normal [100 10])))
+(def w3 (make-node (ma/sample-normal [100 10])))
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b3 (make-node (mr/sample-normal [10])))
+(def b3 (make-node (ma/sample-normal [10])))
 
 ^{:nextjournal.clerk/visibility {:code :hide}}
 (clerk/md (str "Total number of parameters: "
                (->> (map #(.value %) [w1 b1 w2 b2 w3 b3])
-                    (map m/ecount)
+                    (map ma/count)
                     (reduce +))))
 
 ;; ### Optimization
 
 (def results
-  (loop [data (take 1 data)
+  (loop [data (take 100 data)
          ;;data (repeat 200 (first data))
          ;; Parameters
          w1 w1 b1 b1 w2 w2 b2 b2 w3 w3 b3 b3
@@ -118,10 +114,10 @@
     (if (not (empty? data))
       (let [xs (map first (take batch-size data))
             ys (map second (take batch-size data))
-            ytargets (make-node (map (fn [y] (util/one-hot 10 y)) ys))
+            ytargets (make-node (map (fn [y] (ma/one-hot 10 y)) ys))
             batch-size (min batch-size (count xs)) ;; Clamp batch-size based on actual number of examples 
             ;; Convolution
-            input (make-node (m/reshape xs [batch-size channels image-size image-size]))
+            input (make-node (ma/reshape xs [batch-size channels image-size image-size]))
             unfold (im2col input filter-size filter-size stride)
             weights (transpose (reshape w1 [num-filters (* channels filter-size filter-size)]))
             m (relu (add (mmul unfold weights) b1))
@@ -145,23 +141,22 @@
         (println "loss:" (.value loss) "avg loss:" (/ (.value loss) batch-size)
                  "accuracy:" (float (/ (-> (last progress) (get :accurate 0) (+ accurate))
                                        (-> (last progress) (get :count 0) (+ batch-size)))))
-        ;;(m/pm (get grads w1))
-        (doseq [param [w1 b1 w2 b2 w3 b3]]
-          (println "dparam: min" (m/emin (get grads param)) "max:" (m/emax (get grads param))))
+        ;;(doseq [param [w1 b1 w2 b2 w3 b3]]
+        ;;  (println "dparam: min" (ma/min (get grads param)) "max:" (ma/max (get grads param))))
 
         (recur (drop batch-size data)
-               (make-node (m/sub (.value w1) (m/mul learning-rate (get grads w1))))
-               (make-node (m/sub (.value b1) (m/mul learning-rate (get grads b1))))
-               (make-node (m/sub (.value w2) (m/mul learning-rate (get grads w2))))
-               (make-node (m/sub (.value b2) (m/mul learning-rate (get grads b2))))
-               (make-node (m/sub (.value w3) (m/mul learning-rate (get grads w3))))
-               (make-node (m/sub (.value b3) (m/mul learning-rate (get grads b3))))
+               (make-node (ma/sub (.value w1) (ma/mul learning-rate (get grads w1))))
+               (make-node (ma/sub (.value b1) (ma/mul learning-rate (get grads b1))))
+               (make-node (ma/sub (.value w2) (ma/mul learning-rate (get grads w2))))
+               (make-node (ma/sub (.value b2) (ma/mul learning-rate (get grads b2))))
+               (make-node (ma/sub (.value w3) (ma/mul learning-rate (get grads w3))))
+               (make-node (ma/sub (.value b3) (ma/mul learning-rate (get grads b3))))
                (conj progress {:loss (/ (.value loss) batch-size)
                                :accurate (-> (last progress) (get :accurate 0) (+ accurate))
                                :count (-> (last progress) (get :count 0) (+ batch-size))
                                :grads (->> (map vector ["w1" "b1" "w2" "b2" "w3" "b3"] [w1 b1 w2 b2 w3 b3])
-                                           (reduce (fn [g [name param]] (-> (assoc-in g [name :min] (m/emin (get grads param)))
-                                                                            (assoc-in [name :max] (m/emax (get grads param)))))
+                                           (reduce (fn [g [name param]] (-> (assoc-in g [name :min] (ma/min (get grads param)))
+                                                                            (assoc-in [name :max] (ma/max (get grads param)))))
                                                    {}))})))
       {:progress progress
        :params [w1 b1 w2 b2 w3 b3]})))
@@ -181,4 +176,4 @@
                        (for [n ["w1" "b1" "w2" "b2" "w3" "b3"] agg [:min :max]]
                          {:name (str (name agg) "(d" n ")")
                           :x x
-                          :y (map (fn [p] (get-in p [:grads n agg])) results)}))})
+                          :y (map (fn [p] (get-in p [:grads n agg])) (:progress results))}))})
