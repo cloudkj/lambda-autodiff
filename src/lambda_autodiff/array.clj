@@ -2,7 +2,33 @@
   (:refer-clojure :exclude [count flatten max min set])
   (:require [clojure.core.matrix :as m]
             [clojure.core.matrix.random :as mr]
-            [clojure.math.combinatorics :as combo]))
+            [clojure.math.combinatorics :as combo])
+  (:import [ai.djl.ndarray NDManager]
+           [ai.djl.ndarray.types Shape]))
+
+(def ^:dynamic *implementation* :core-matrix)
+
+(def nd-manager (NDManager/newBaseManager))
+
+(defn set-implementation!
+  [impl]
+  (alter-var-root (var *implementation*) (fn [_] impl)))
+
+(defn array
+  [data]
+  (case *implementation*
+    :core-matrix (m/array data)
+    :djl (let [;; Optimistically compute shape of a collection in a depth-first manner
+               shape (loop [coll data shape (list)]
+                       (if (not (coll? coll))
+                         (reverse shape)
+                         (recur (first coll)
+                                (cons (clojure.core/count coll) shape))))
+               flat (clojure.core/flatten data)]
+           (assert (= (clojure.core/count flat) (apply * shape)) "Mismatch between input data and shape")
+           ;; TODO: figure out how to convert `flat` into properly typed array
+           ;; (e.g. `long-array`, `float-array`, etc.)based on element type
+           (.create nd-manager (into-array Double/TYPE flat) (Shape. (long-array shape))))))
 
 ;; Adapter functions - shim layer over underlying implementations
 
