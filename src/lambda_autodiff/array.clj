@@ -34,51 +34,78 @@
 
 (defn add
   [a b]
-  (m/add a b))
+  (case *implementation*
+    :core-matrix (m/add a b)
+    :djl (.add a b)))
 
 (defn broadcast
   [a shape]
-  (m/broadcast a shape))
+  (case *implementation*
+    :core-matrix (m/broadcast a shape)
+    :djl (.broadcast a (long-array shape))))
 
 (defn cos
   [a]
-  (m/cos a))
+  (case *implementation*
+    :core-matrix (m/cos a)
+    :djl (.cos a)))
 
 (defn count
   [a]
-  (m/ecount a))
+  (case *implementation*
+    :core-matrix (m/ecount a)
+    :djl (.size a)))
 
 (defn dimensionality
   [a]
-  (m/dimensionality a))
+  (case *implementation*
+    :core-matrix (m/dimensionality a)
+    :djl (.dimension (.getShape a))))
 
 (defn div
   [a b]
-  (m/div a b))
+  (case *implementation*
+    :core-matrix (m/div a b)
+    :djl (.div a b)))
 
 (defn emap
   [f a]
-  (m/emap f a))
+  (case *implementation*
+    :core-matrix (m/emap f a)
+    ;; TODO: figure out how to create correctly typed primitive array based on type of output from `f`
+    :djl (.create nd-manager (into-array Double/TYPE (map f (.toArray a))) (.getShape a))))
 
 (defn exp
   [a]
-  (m/exp a))
+  (case *implementation*
+    :core-matrix (m/exp a)
+    :djl (.exp a)))
 
 (defn flatten
   [a]
-  (m/to-vector a))
+  (case *implementation*
+    :core-matrix (m/to-vector a)
+    :djl (.flatten a)))
 
 (defn log
   [a]
-  (m/log a))
+  (case *implementation*
+    :core-matrix (m/log a)
+    :djl (.log a)))
 
 (defn max
   [a]
-  (m/emax a))
+  (case *implementation*
+    :core-matrix (m/emax a)
+    ;; TODO: use correct getter (e.g. getFloat, getInt, ...) depending on numeric type of `a` elements
+    :djl (.getDouble (.max a) (long-array 0))))
 
 (defn min
   [a]
-  (m/emin a))
+  (case *implementation*
+   :core-matrix (m/emin a)
+    ;; TODO: use correct getter (e.g. getFloat, getInt, ...) depending on numeric type of `a` elements
+   :djl (.getDouble (.min a) (long-array 0))))
 
 (defn mul
   [a b]
