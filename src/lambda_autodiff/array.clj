@@ -109,27 +109,39 @@
 
 (defn mul
   [a b]
-  (m/mul a b))
+  (case *implementation*
+    :core-matrix (m/mul a b)
+    :djl (.mul a b)))
 
 (defn negate
   [a]
-  (m/negate a))
+  (case *implementation*
+    :core-matrix (m/negate a)
+    :djl (.neg a)))
 
 (defn ones
   [shape]
-  (m/fill (m/new-array shape) 1))
+  (case *implementation*
+    :core-matrix (m/fill (m/new-array shape) 1)
+    :djl (.ones nd-manager (Shape. (long-array shape)))))
 
 (defn pow
   [a exponent]
-  (m/pow a exponent))
+  (case *implementation*
+    :core-matrix (m/pow a exponent)
+    :djl (.pow a exponent)))
 
 (defn reshape
   [a shape]
-  (m/reshape a shape))
+  (case *implementation*
+    :core-matrix (m/reshape a shape)
+    :djl (.reshape a (Shape. (long-array shape)))))
 
 (defn sample-normal
   [shape]
-  (mr/sample-normal shape))
+  (case *implementation*
+    :core-matrix (mr/sample-normal shape)
+    :djl (.randomNormal nd-manager (Shape. (long-array shape)))))
 
 (defn select
   [a & indexes]
