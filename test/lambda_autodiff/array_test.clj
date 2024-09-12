@@ -2,6 +2,13 @@
   (:require [clojure.test :refer :all]
             [lambda-autodiff.array :as ma]))
 
+(deftest test-select
+  (let [a (ma/array [[1 2] [3 4]])]
+    (is (ma/equals (ma/array 1) (ma/select a 0 0)))
+    (is (ma/equals (ma/array [1 2]) (ma/select a 0 :all)))
+    (is (ma/equals (ma/array [[1] [3]]) (ma/select a [0 1] [0])))
+    (is (ma/equals (ma/array [1 3]) (ma/select a :all 0)))))
+
 (deftest test-asum
   (let [a [[[0 1] [1 0] [2 1] [1 3]]
            [[1 0] [5 1] [7 0] [-4 1]]

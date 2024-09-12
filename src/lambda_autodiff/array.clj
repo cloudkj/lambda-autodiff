@@ -18,17 +18,20 @@
   [data]
   (case *implementation*
     :core-matrix (m/array data)
-    :djl (let [;; Optimistically compute shape of a collection in a depth-first manner
-               shape (loop [coll data shape (list)]
-                       (if (not (coll? coll))
-                         (reverse shape)
-                         (recur (first coll)
-                                (cons (clojure.core/count coll) shape))))
-               flat (clojure.core/flatten data)]
-           (assert (= (clojure.core/count flat) (apply * shape)) "Mismatch between input data and shape")
-           ;; TODO: figure out how to convert `flat` into properly typed array
-           ;; (e.g. `long-array`, `float-array`, etc.)based on element type
-           (.create nd-manager (into-array Double/TYPE flat) (Shape. (long-array shape))))))
+    :djl (if (not (coll? data))
+           ;; TODO: remove explicit coercion to double once TODO below is resolved
+           (.create nd-manager (double data))
+           (let [;; Optimistically compute shape of a collection in a depth-first manner
+                 shape (loop [coll data shape (list)]
+                         (if (not (coll? coll))
+                           (reverse shape)
+                           (recur (first coll)
+                                  (cons (clojure.core/count coll) shape))))
+                 flat (clojure.core/flatten data)]
+             (assert (= (clojure.core/count flat) (apply * shape)) "Mismatch between input data and shape")
+             ;; TODO: figure out how to convert `flat` into properly typed array
+             ;; (e.g. `long-array`, `float-array`, etc.) based on element type
+             (.create nd-manager (into-array Double/TYPE flat) (Shape. (long-array shape)))))))
 
 ;; Adapter functions - shim layer over underlying implementations
 
@@ -145,7 +148,37 @@
 
 (defn select
   [a & indexes]
-  (apply m/select (cons a indexes)))
+  (case *implementation*
+    :core-matrix (apply m/select (cons a indexes))
+    ;; Note: by design, only supporst a subset of valid arguments from clojure.core.matrix/select.
+    ;; Additionally, due to limitation in DJL, certain indexing combinations are not supported.
+    ;; For example, take-based indexing (specifying indexes for a dimension) only allows specifying
+    ;; indexes for one dimension while other dimensions must be specified as returning all values.
+    :djl (let [slice? (fn [coll]
+                        (and (coll? coll)
+                             (let [sorted (sort coll)]
+                               (and (apply < sorted)
+                                    (= (count sorted) (inc (- (last sorted) (first sorted))))))))
+               ;; Construct comma-separated list of index placeholders
+               index-str (->> indexes
+                              (reduce (fn [s i]
+                                        (cond (number? i) (conj s "{}")
+                                              (slice? i) (conj s "{}:{}")
+                                              (coll? i) (conj s "{}")
+                                              (= :all i) (conj s ":")
+                                              :else (throw (Exception. (str "Unsupported index type " i)))))
+                                      [])
+                              (clojure.string/join ", "))
+               ;; Construct arguments to be used for actual values against placeholders
+               index-args (reduce (fn [s i]
+                                    (cond (number? i) (conj s i)
+                                          (slice? i) (let [sorted (sort i)] (-> s (conj (first sorted)) (conj (inc (last sorted)))))
+                                          (coll? i) (conj s (.create nd-manager (int-array i)))
+                                          (= :all i) s
+                                          :else (throw (Exception. (str "Unsupported index type " i)))))
+                                  []
+                                  indexes)]
+           (.get a index-str (to-array index-args)))))
 
 (defn set
   [a & args]
@@ -157,7 +190,9 @@
 
 (defn shape
   [a]
-  (m/shape a))
+  (case *implementation*
+    :core-matrix (m/shape a)
+    :djl (vec (.getShape (.getShape a)))))
 
 (defn sin
   [a]
@@ -194,7 +229,9 @@
   ([a b]
    (equals a b 0.0))
   ([a b epsilon]
-   (m/equals a b epsilon)))
+   (case *implementation*
+     :core-matrix (m/equals a b epsilon)
+     :djl (and (.shapeEquals a b) (.allClose a b Double/MAX_VALUE epsilon true)))))
 
 ;; Utility functions
 
