@@ -7,9 +7,11 @@
 (deftype Node [value label children]
   Object
   (toString [node]
-    (if (nil? (.label node))
-      (str (.value node))
-      (format "%s [%s]" (.label node) (str (.value node))))))
+    (let [v (str (.value node))
+          v (if (< (count v) 10) v (str (subs v 0 10) "..."))]
+      (if (nil? (.label node))
+        v
+        (format "%s [%s]" (.label node) v)))))
 
 (defn make-node
   "Creates a node in the computational graph"
@@ -58,7 +60,7 @@
 
 (defn pow
   [a exponent]
-  ;; TODO: add restriction that `exponent` is scalar only and not another node
+  (assert (number? exponent))
   (make-node (ma/pow (.value a) exponent)
              "pow"
              [[a (fn [upstream] (ma/mul upstream (ma/mul exponent (ma/pow (.value a) (- exponent 1)))))]]))
@@ -102,6 +104,33 @@
 (defn sub
   [a b]
   (make-node (ma/sub (.value a) (.value b)) "-" [[a identity] [b ma/negate]]))
+
+(defn join
+  [a b]
+  (let [a-dims (ma/dimensionality (.value a))
+        b-dims (ma/dimensionality (.value b))
+        a-dim-count (ma/dimension-count (.value a) 0)
+        b-dim-count (ma/dimension-count (.value b) 0)]
+    (assert (= a-dims b-dims))
+    (make-node (ma/join (.value a) (.value b))
+               "join"
+               [[a (fn [upstream]
+                      (apply ma/select (->> (repeat (dec (ma/dimensionality (.value a))) :all)
+                                            (cons (range 0 a-dim-count))
+                                            (cons upstream))))]
+                [b (fn [upstream]
+                      (apply ma/select (->> (repeat (dec (ma/dimensionality (.value b))) :all)
+                                            (cons (range a-dim-count (+ a-dim-count b-dim-count)))
+                                            (cons upstream))))]])))
+
+(defn select
+  [a & indexes]
+  (make-node (apply ma/select (cons (.value a) indexes))
+              "select"
+              [[a (fn [upstream] (->> upstream
+                                      (conj (vec indexes))
+                                      (cons (ma/zeros (ma/shape (.value a))))
+                                      (apply ma/set)))]]))
 
 ;; Differentiation
 

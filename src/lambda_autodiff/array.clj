@@ -22,6 +22,10 @@
   [a]
   (m/ecount a))
 
+(defn dimension-count
+  [a dim]
+  (m/dimension-count a dim))
+
 (defn dimensionality
   [a]
   (m/dimensionality a))
@@ -41,6 +45,10 @@
 (defn flatten
   [a]
   (m/to-vector a))
+
+(defn join
+  [a b]
+  (m/join a b))
 
 (defn log
   [a]

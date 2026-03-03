@@ -79,6 +79,32 @@
     (is (ma/equals [[1 1 1] [1 1 1]] (get grads a)))
     (is (ma/equals [[-1 -1 -1] [-1 -1 -1]] (get grads b)))))
 
+(deftest test-join
+  (let [a (make-node [1 2])
+        b (make-node [3 4])
+        c (sum (pow (join a b) 2))
+        grads (differentiate c)]
+    (is (ma/equals [2.0 4.0] (get grads a)))
+    (is (ma/equals [6.0 8.0] (get grads b)))))
+
+(deftest test-join2
+  (let [a (make-node [[1 2 3] [10 20 30]])
+        b (make-node [[4 5 6]])
+        c (make-node [[7 8 9] [77 88 99] [-1 -2 -3]])
+        d (join (join a b) c)
+        e (sum (pow d 2))
+        grads (differentiate e)]
+    (is (ma/equals [[2 4 6] [20 40 60]] (get grads a)))
+    (is (ma/equals [[8 10 12]] (get grads b)))
+    (is (ma/equals [[14 16 18] [154 176 198] [-2 -4 -6]] (get grads c)))))
+
+(deftest test-select
+  (let [a (make-node [1 2 3 4 5])
+        b (select a (range 1 4))
+        c (sum (mul b b))
+        grads (differentiate c)]
+    (is (ma/equals [0 4 6 8 0] (get grads a)))))
+
 (deftest test-grad-shape
   (let [x (make-node [[1 2 3 4]])
         w (make-node [[1 2] [3 4] [5 6] [7 8]])
