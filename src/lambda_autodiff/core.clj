@@ -106,22 +106,23 @@
   (make-node (ma/sub (.value a) (.value b)) "-" [[a identity] [b ma/negate]]))
 
 (defn join
-  [a b]
-  (let [a-dims (ma/dimensionality (.value a))
-        b-dims (ma/dimensionality (.value b))
-        a-dim-count (ma/dimension-count (.value a) 0)
-        b-dim-count (ma/dimension-count (.value b) 0)]
-    (assert (= a-dims b-dims))
-    (make-node (ma/join (.value a) (.value b))
-               "join"
-               [[a (fn [upstream]
-                      (apply ma/select (->> (repeat (dec (ma/dimensionality (.value a))) :all)
-                                            (cons (range 0 a-dim-count))
-                                            (cons upstream))))]
-                [b (fn [upstream]
-                      (apply ma/select (->> (repeat (dec (ma/dimensionality (.value b))) :all)
-                                            (cons (range a-dim-count (+ a-dim-count b-dim-count)))
-                                            (cons upstream))))]])))
+  ([a b]
+   (join a b 0))
+  ([a b dim]
+   (let [a-dims (ma/dimensionality (.value a))
+         b-dims (ma/dimensionality (.value b))
+         a-dim-count (ma/dimension-count (.value a) dim)
+         b-dim-count (ma/dimension-count (.value b) dim)]
+     (make-node (ma/join-along (.value a) (.value b) dim)
+                "join"
+                [[a (fn [upstream]
+                        (apply ma/select (->> (range 0 a-dim-count)
+                                              (assoc (vec (repeat a-dims :all)) dim)
+                                              (cons upstream))))]
+                 [b (fn [upstream]
+                       (apply ma/select (->> (range a-dim-count (+ a-dim-count b-dim-count))
+                                              (assoc (vec (repeat b-dims :all)) dim)
+                                              (cons upstream))))]]))))
 
 (defn select
   [a & indexes]

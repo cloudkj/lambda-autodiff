@@ -46,9 +46,9 @@
   [a]
   (m/to-vector a))
 
-(defn join
-  [a b]
-  (m/join a b))
+(defn join-along
+  [a b dim]
+  (m/join-along dim a b))
 
 (defn log
   [a]
