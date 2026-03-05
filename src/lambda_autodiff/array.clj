@@ -83,8 +83,10 @@
   (m/reshape a shape))
 
 (defn sample-normal
-  [shape]
-  (mr/sample-normal shape))
+  ([shape]
+   (mr/sample-normal shape))
+  ([shape std]
+   (m/mul (mr/sample-normal shape) std)))
 
 (defn select
   [a & indexes]

@@ -18,7 +18,7 @@
 
 (def n-layer 1)
 
-(def n-embd 8)
+(def n-embd 16)
 
 (def block-size 16)
 
@@ -39,13 +39,8 @@
         scale (pow (add ms (make-node 1e-5)) -0.5)]
     (mul x scale)))
 
-(defn sample-normal
-  ([shape]
-   (sample-normal shape 0.08))
-  ([shape std]
-   (ma/mul (ma/sample-normal shape) std)))
-
 (def state-dict
+  (let [sample-normal (fn [shape] (ma/sample-normal shape 0.08))]
     (loop [state-dict {"wte" (make-node (sample-normal [vocab-size n-embd]) "wte")
                        "wpe" (make-node (sample-normal [block-size n-embd]) "wpe")
                        "lm_head" (make-node (sample-normal [vocab-size n-embd]) "lm-head")}
@@ -59,23 +54,7 @@
                        (assoc (str "layer" i ".attn_wo") (make-node (sample-normal [n-embd n-embd]) (str "layer" i ".attn_wo")))
                        (assoc (str "layer" i ".mlp_fc1") (make-node (sample-normal [(* 4 n-embd) n-embd]) (str "layer" i ".mlp_fc1")))
                        (assoc (str "layer" i ".mlp_fc2") (make-node (sample-normal [n-embd (* 4 n-embd)]) (str "layer" i ".mlp_fc2"))))
-                   (inc 1)))))
-
-;; (def state-dict
-;;     (loop [state-dict {"wte" (make-node (repeat vocab-size (repeat n-embd 0.0123)) "wte")
-;;                        "wpe" (make-node (repeat block-size (repeat n-embd 0.0123)) "wpe")
-;;                        "lm_head" (make-node (repeat vocab-size (repeat n-embd 0.0123)) "lm-head")}
-;;            i 0]
-;;         (if (>= i n-layer)
-;;             state-dict
-;;             (recur (-> state-dict
-;;                        (assoc (str "layer" i ".attn_wq") (make-node (repeat n-embd (repeat n-embd 0.0123))))
-;;                        (assoc (str "layer" i ".attn_wk") (make-node (repeat n-embd (repeat n-embd 0.0123))))
-;;                        (assoc (str "layer" i ".attn_wv") (make-node (repeat n-embd (repeat n-embd 0.0123))))
-;;                        (assoc (str "layer" i ".attn_wo") (make-node (repeat n-embd (repeat n-embd 0.0123))))
-;;                        (assoc (str "layer" i ".mlp_fc1") (make-node (repeat (* 4 n-embd) (repeat n-embd 0.0123))))
-;;                        (assoc (str "layer" i ".mlp_fc2") (make-node (repeat n-embd (repeat (* 4 n-embd) 0.0123)))))
-;;                    (inc 1)))))
+                   (inc 1))))))
 
 (println (map #(str % (ma/shape (.value (state-dict %))) "\n") (keys state-dict)))
 
@@ -130,12 +109,10 @@
 (def beta2 0.99)
 (def eps-adam 1e-8)
 
-(def m (update-vals state-dict #(ma/zeros (ma/shape (.value %)))))
-(def v (update-vals state-dict #(ma/zeros (ma/shape (.value %)))))
-
-(defn train
+(defn train-step
   [step num-steps state-dict m v]
   (let [doc (nth docs (mod step (count docs)))
+        _ (println "doc:" doc)
         tokens (->> (map (fn [c] (get uchars c)) doc)
                     (cons BOS)
                     (reverse)
@@ -156,13 +133,12 @@
                       (recur (inc pos-id) keys values (conj losses loss-t)))))
          grads (differentiate loss)
          lr-t (* learning-rate (- 1 (/ step num-steps)))]
-     (println "step:" (inc step) "/" num-steps " | loss:" (.value loss))
      (loop [params (keys state-dict)
             updates {}
             m m
             v v]
        (if (empty? params)
-         [updates m v]
+         [updates (first (.value loss)) m v]
          (let [p (first params)
                mi (ma/add (ma/mul beta1 (m p)) (ma/mul (- 1 beta1) (grads (state-dict p))))
                vi (ma/add (ma/mul beta2 (v p)) (ma/mul (- 1 beta2) (ma/pow (grads (state-dict p)) 2)))
@@ -174,21 +150,11 @@
                                         (make-node p)))
                   (assoc m p mi)
                   (assoc v p vi)))))))
- 
-(defn traingpt
-  [num-steps]
-  (loop [step 0 state-dict state-dict m m v v]
-    (if (>= step num-steps)
-        state-dict
-        (do
-          ;;(if (= (mod step 10) 0) (testgpt state-dict))
-          (let [[updates m' v'] (train step num-steps state-dict m v)]
-            (recur (inc step) updates m' v'))))))
 
-(defn testgpt
-  [state-dict]
+(defn infer
+  [state-dict sample-size]
   (let [chars (set/map-invert uchars)]
-    (dotimes [sample-idx 4]
+    (for [_ (range sample-size)]
       (let [sample (loop [pos-id 0
                           token-id nil
                           keys []
@@ -201,4 +167,42 @@
                                        probs (softmax logits)
                                        token-id (util/choose (ma/flatten (.value probs)))]
                                     (recur (inc pos-id) token-id keys values (conj sample (chars token-id))))))]
-        (println "sample" sample-idx ": {" (apply str sample) "}")))))
+        (apply str sample)))))
+ 
+(defn train
+  [num-steps sample-step]
+  (loop [step 0
+         progress []
+         state-dict state-dict
+         m (update-vals state-dict #(ma/zeros (ma/shape (.value %))))
+         v (update-vals state-dict #(ma/zeros (ma/shape (.value %))))]
+    (if (>= step num-steps)
+        {:params state-dict
+         :progress progress}
+        (do
+          (let [samples (when (= (mod step sample-step) 0) (infer state-dict 5))
+                [state-dict loss m v] (train-step step num-steps state-dict m v)]
+            (when (not (nil? samples)) (dorun (map-indexed #(println "sample" %1 ": {" %2 "}") samples)))
+            (println "step:" (inc step) "/" num-steps " | loss:" loss)
+            (recur (inc step)
+                   (conj progress (cond-> {:step step :loss loss} (not (nil? samples)) (assoc :samples samples)))
+                   state-dict
+                   m
+                   v))))))
+
+(def results
+  (let [num-steps 2000
+        sample-step 50]
+    (train num-steps sample-step)))
+
+(clerk/table {::clerk/page-size nil}
+             {:head ["step" "sample"]
+              :rows (->> (:progress results)
+                         (filter (fn [p] (not (nil? (:samples p)))))
+                         (mapcat (fn [p] (map #(list (:step p) %) (:samples p)))))})
+
+(clerk/vl {:data {:values (:progress results)}
+           :width 600 :height 400
+           :encoding {:x {:field "step" :type "quantitative"}}
+           :layer [{:mark "line" :encoding {:color {:value "#1f77b4"} :y {:field "loss" :type "quantitative"}}}]
+           :resolve {:scale {:y "independent"}}})

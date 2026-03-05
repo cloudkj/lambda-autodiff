@@ -1,10 +1,15 @@
 (ns lambda-autodiff.core
   (:require [lambda-autodiff.array :as ma]))
 
+(defprotocol LeafNode
+  (leaf? [this] false))
+
 ;; Custom type to represent a node in the computational graph. Each node instance is a unique
 ;; entity, independent of underlying values. We use a custom type as workaround for Clojure
 ;; default value-based equality and hashing behavior.
 (deftype Node [value label children]
+  LeafNode
+  (leaf? [this] (empty? children))
   Object
   (toString [node]
     (let [v (str (.value node))
@@ -160,10 +165,9 @@
       (let [[node upstream] (peek stack)
             ;; Apply chain rule along path from root to child with update function
             children (map (fn [[child update]] [child (update upstream)]) (.children node))]
-        (recur (reduce (fn [gs [child downstream]]
-                         ;; Accumulate gradients for each child to apply multivariate chain rule
-                         (assoc gs child (ma/add (get gs child 0) downstream)))
-                       gradients
-                       children)
+        (recur ;; Accumulate gradients for each leaf node child to apply multivariate chain rule
+               (->> (filter (fn [[child downstream]] (leaf? child)) children)
+                    (reduce (fn [gs [child downstream]] (assoc gs child (ma/add (get gs child 0) downstream)))
+                            gradients))
                ;; Push all child nodes onto stack and pass derivatives, from root to child thus far, downstream
                (reduce conj (pop stack) children))))))
