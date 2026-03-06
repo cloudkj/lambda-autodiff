@@ -142,19 +142,21 @@
 
 (defn differentiate
   "Returns a map of nodes to partial derivative values"
-  [root]
-  (loop [gradients {}
+  ([root]
+   (differentiate root true))
+  ([root filter-leaf?]
+   (loop [gradients {}
          ;; Reshape base derivative to match root output shape
          stack (list [root (ma/ones (ma/shape (.value root)))])]
-    (if (empty? stack)
-      ;; Post-process gradients at the end of accumulation to account for different shapes
-      (->> gradients
+     (if (empty? stack)
+       ;; Post-process gradients at the end of accumulation to account for different shapes
+       (->> gradients
            (map (fn [[c g]]
-                  [c
+                   [c
                    ;; If child shape is smaller than gradient shape, sum gradient along axes that would be expanded during broadcasting
                    (cond (< (ma/count (.value c)) (ma/count g))
                          (->> (ma/broadcast-axes (ma/shape (.value c)) (ma/shape g))
-                              (ma/asum g))
+                               (ma/asum g))
                          ;; If child shape is larger than gradient shape, broadcast gradient to match child shape
                          (> (ma/count (.value c)) (ma/count g))
                          (ma/broadcast g (ma/shape (.value c)))
@@ -162,12 +164,12 @@
            ;; Reshape gradient to match child shape if dimensionality unequal
            (map (fn [[c g]] [c (if (not (= (ma/dimensionality (.value c)) (ma/dimensionality g))) (ma/reshape g (ma/shape (.value c))) g)]))
            (into {}))
-      (let [[node upstream] (peek stack)
-            ;; Apply chain rule along path from root to child with update function
-            children (map (fn [[child update]] [child (update upstream)]) (.children node))]
-        (recur ;; Accumulate gradients for each leaf node child to apply multivariate chain rule
-               (->> (filter (fn [[child downstream]] (leaf? child)) children)
+       (let [[node upstream] (peek stack)
+             ;; Apply chain rule along path from root to child with update function
+             children (map (fn [[child update]] [child (update upstream)]) (.children node))]
+         (recur ;; Accumulate gradients for each leaf node child to apply multivariate chain rule
+               (->> (if filter-leaf? (filter (fn [[child downstream]] (leaf? child)) children) children)
                     (reduce (fn [gs [child downstream]] (assoc gs child (ma/add (get gs child 0) downstream)))
-                            gradients))
+                             gradients))
                ;; Push all child nodes onto stack and pass derivatives, from root to child thus far, downstream
-               (reduce conj (pop stack) children))))))
+               (reduce conj (pop stack) children)))))))
