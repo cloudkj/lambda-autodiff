@@ -22,6 +22,10 @@
   [a]
   (m/ecount a))
 
+(defn dimension-count
+  [a dim]
+  (m/dimension-count a dim))
+
 (defn dimensionality
   [a]
   (m/dimensionality a))
@@ -41,6 +45,10 @@
 (defn flatten
   [a]
   (m/to-vector a))
+
+(defn join-along
+  [a b dim]
+  (m/join-along dim a b))
 
 (defn log
   [a]
@@ -75,8 +83,10 @@
   (m/reshape a shape))
 
 (defn sample-normal
-  [shape]
-  (mr/sample-normal shape))
+  ([shape]
+   (mr/sample-normal shape))
+  ([shape std]
+   (m/mul (mr/sample-normal shape) std)))
 
 (defn select
   [a & indexes]

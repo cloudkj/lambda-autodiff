@@ -79,6 +79,49 @@
     (is (ma/equals [[1 1 1] [1 1 1]] (get grads a)))
     (is (ma/equals [[-1 -1 -1] [-1 -1 -1]] (get grads b)))))
 
+(deftest test-join
+  (let [a (make-node [1 2])
+        b (make-node [3 4])
+        c (sum (pow (join a b) 2))
+        grads (differentiate c)]
+    (is (ma/equals [2.0 4.0] (get grads a)))
+    (is (ma/equals [6.0 8.0] (get grads b)))))
+
+(deftest test-join2
+  (let [a (make-node [[1 2 3] [10 20 30]])
+        b (make-node [[4 5 6]])
+        c (make-node [[7 8 9] [77 88 99] [-1 -2 -3]])
+        d (join (join a b) c)
+        e (sum (pow d 2))
+        grads (differentiate e)]
+    (is (ma/equals [[2 4 6] [20 40 60]] (get grads a)))
+    (is (ma/equals [[8 10 12]] (get grads b)))
+    (is (ma/equals [[14 16 18] [154 176 198] [-2 -4 -6]] (get grads c)))))
+
+(deftest test-join3
+  (let [a (make-node [[11 22]])
+        b (make-node [[30 40]])
+        c (make-node [[5 6]])
+        d0 (join (join a b 0) c 0)
+        d0 (sum (mul d0 d0))
+        d1 (join (join a b 1) c 1)
+        d1 (sum (mul d1 d1))
+        grads0 (differentiate d0)
+        grads1 (differentiate d1)]
+    (is (ma/equals [[22 44]] (get grads0 a)))
+    (is (ma/equals [[22 44]] (get grads1 a)))
+    (is (ma/equals [[60 80]] (get grads0 b)))
+    (is (ma/equals [[60 80]] (get grads1 b)))
+    (is (ma/equals [[10 12]] (get grads0 c)))
+    (is (ma/equals [[10 12]] (get grads1 c)))))
+
+(deftest test-select
+  (let [a (make-node [1 2 3 4 5])
+        b (select a (range 1 4))
+        c (sum (mul b b))
+        grads (differentiate c)]
+    (is (ma/equals [0 4 6 8 0] (get grads a)))))
+
 (deftest test-grad-shape
   (let [x (make-node [[1 2 3 4]])
         w (make-node [[1 2] [3 4] [5 6] [7 8]])
@@ -137,7 +180,7 @@
         f (pow e 2.0)
         g (div f (make-node 2.0))
         g (add g (div (make-node 10.0) f))
-        grads (differentiate g)]
+        grads (differentiate g false)]
     (is (ma/equals 24.7041 (.value g) 1e-4))
     (is (ma/equals 138.8338 (get grads a) 1e-4))
     (is (ma/equals 645.5773 (get grads b) 1e-4))
@@ -159,7 +202,7 @@
         f (pow e 2.0)
         g (div f (make-node 2.0))
         g (add g (div (make-node 10.0) f))
-        grads (differentiate g)]
+        grads (differentiate g false)]
     (is (ma/equals [24.7041 14112.0004 1104.5045] (.value g) 1e-4))
     (is (ma/equals [138.8338 4199.9999 939.9961] (get grads a) 1e-4))
     (is (ma/equals 36384.5540 (get grads b) 1e-4))

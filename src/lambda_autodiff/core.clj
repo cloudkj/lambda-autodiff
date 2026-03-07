@@ -1,15 +1,22 @@
 (ns lambda-autodiff.core
   (:require [lambda-autodiff.array :as ma]))
 
+(defprotocol LeafNode
+  (leaf? [this] false))
+
 ;; Custom type to represent a node in the computational graph. Each node instance is a unique
 ;; entity, independent of underlying values. We use a custom type as workaround for Clojure
 ;; default value-based equality and hashing behavior.
 (deftype Node [value label children]
+  LeafNode
+  (leaf? [this] (empty? children))
   Object
   (toString [node]
-    (if (nil? (.label node))
-      (str (.value node))
-      (format "%s [%s]" (.label node) (str (.value node))))))
+    (let [v (str (.value node))
+          v (if (< (count v) 10) v (str (subs v 0 10) "..."))]
+      (if (nil? (.label node))
+        v
+        (format "%s [%s]" (.label node) v)))))
 
 (defn make-node
   "Creates a node in the computational graph"
@@ -58,7 +65,7 @@
 
 (defn pow
   [a exponent]
-  ;; TODO: add restriction that `exponent` is scalar only and not another node
+  (assert (number? exponent))
   (make-node (ma/pow (.value a) exponent)
              "pow"
              [[a (fn [upstream] (ma/mul upstream (ma/mul exponent (ma/pow (.value a) (- exponent 1)))))]]))
@@ -103,23 +110,53 @@
   [a b]
   (make-node (ma/sub (.value a) (.value b)) "-" [[a identity] [b ma/negate]]))
 
+(defn join
+  ([a b]
+   (join a b 0))
+  ([a b dim]
+   (let [a-dims (ma/dimensionality (.value a))
+         b-dims (ma/dimensionality (.value b))
+         a-dim-count (ma/dimension-count (.value a) dim)
+         b-dim-count (ma/dimension-count (.value b) dim)]
+     (make-node (ma/join-along (.value a) (.value b) dim)
+                "join"
+                [[a (fn [upstream]
+                        (apply ma/select (->> (range 0 a-dim-count)
+                                              (assoc (vec (repeat a-dims :all)) dim)
+                                              (cons upstream))))]
+                 [b (fn [upstream]
+                       (apply ma/select (->> (range a-dim-count (+ a-dim-count b-dim-count))
+                                              (assoc (vec (repeat b-dims :all)) dim)
+                                              (cons upstream))))]]))))
+
+(defn select
+  [a & indexes]
+  (make-node (apply ma/select (cons (.value a) indexes))
+              "select"
+              [[a (fn [upstream] (->> upstream
+                                      (conj (vec indexes))
+                                      (cons (ma/zeros (ma/shape (.value a))))
+                                      (apply ma/set)))]]))
+
 ;; Differentiation
 
 (defn differentiate
   "Returns a map of nodes to partial derivative values"
-  [root]
-  (loop [gradients {}
+  ([root]
+   (differentiate root true))
+  ([root filter-leaf?]
+   (loop [gradients {}
          ;; Reshape base derivative to match root output shape
          stack (list [root (ma/ones (ma/shape (.value root)))])]
-    (if (empty? stack)
-      ;; Post-process gradients at the end of accumulation to account for different shapes
-      (->> gradients
+     (if (empty? stack)
+       ;; Post-process gradients at the end of accumulation to account for different shapes
+       (->> gradients
            (map (fn [[c g]]
-                  [c
+                   [c
                    ;; If child shape is smaller than gradient shape, sum gradient along axes that would be expanded during broadcasting
                    (cond (< (ma/count (.value c)) (ma/count g))
                          (->> (ma/broadcast-axes (ma/shape (.value c)) (ma/shape g))
-                              (ma/asum g))
+                               (ma/asum g))
                          ;; If child shape is larger than gradient shape, broadcast gradient to match child shape
                          (> (ma/count (.value c)) (ma/count g))
                          (ma/broadcast g (ma/shape (.value c)))
@@ -127,13 +164,12 @@
            ;; Reshape gradient to match child shape if dimensionality unequal
            (map (fn [[c g]] [c (if (not (= (ma/dimensionality (.value c)) (ma/dimensionality g))) (ma/reshape g (ma/shape (.value c))) g)]))
            (into {}))
-      (let [[node upstream] (peek stack)
-            ;; Apply chain rule along path from root to child with update function
-            children (map (fn [[child update]] [child (update upstream)]) (.children node))]
-        (recur (reduce (fn [gs [child downstream]]
-                         ;; Accumulate gradients for each child to apply multivariate chain rule
-                         (assoc gs child (ma/add (get gs child 0) downstream)))
-                       gradients
-                       children)
+       (let [[node upstream] (peek stack)
+             ;; Apply chain rule along path from root to child with update function
+             children (map (fn [[child update]] [child (update upstream)]) (.children node))]
+         (recur ;; Accumulate gradients for each leaf node child to apply multivariate chain rule
+               (->> (if filter-leaf? (filter (fn [[child downstream]] (leaf? child)) children) children)
+                    (reduce (fn [gs [child downstream]] (assoc gs child (ma/add (get gs child 0) downstream)))
+                             gradients))
                ;; Push all child nodes onto stack and pass derivatives, from root to child thus far, downstream
-               (reduce conj (pop stack) children))))))
+               (reduce conj (pop stack) children)))))))
