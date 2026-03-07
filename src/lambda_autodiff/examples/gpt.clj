@@ -7,6 +7,9 @@
             [clojure.set :as set]
             [nextjournal.clerk :as clerk]))
 
+^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
+(matrix/set-current-implementation :vectorz)
+
 ;; # GPT demo
 ;;
 ;; Implementation of a character-level GPT model, closely following https://karpathy.github.io/2026/02/12/microgpt/
