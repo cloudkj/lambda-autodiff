@@ -14,3 +14,4 @@ architectures.
 * Multi-layer perceptron
 * Character-level recurrent neural network (RNN)
 * Convolutional neural network (CNN) for MNIST digit recognition
+* [GPT](https://cloudkj.github.io/lambda-autodiff/doc/examples/gpt/)

@@ -236,3 +236,11 @@
             :mode "markers"
             :type "scatter"
             :name "y = -1"}]}))
+
+^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
+(defn build-static-html
+  "Run with `lein run -m lambda-autodiff.examples.mlp/build-static-html`"
+  []
+  (clerk/clear-cache!)
+  (clerk/build! {:paths ["src/lambda_autodiff/examples/mlp.clj"]
+                 :out-path "doc/examples/mlp"}))
