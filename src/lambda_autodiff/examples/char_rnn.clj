@@ -226,3 +226,11 @@
         (println "Saving:" filename "shape:" (ma/shape (.value params)))
         (with-open [out (io/output-stream filename)]
           (.write out (nippy/freeze (.value params))))))))
+
+^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
+(defn build-static-html
+  "Run with `lein run -m lambda-autodiff.examples.char-rnn/build-static-html`"
+  []
+  (clerk/clear-cache!)
+  (clerk/build! {:paths ["src/lambda_autodiff/examples/char_rnn.clj"]
+                 :out-path "doc/examples/char_rnn"}))

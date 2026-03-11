@@ -6,6 +6,9 @@
   (:import [java.awt Color]
            [java.awt.image BufferedImage]))
 
+^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
+(clojure.core.matrix/set-current-implementation :vectorz)
+
 ;; # MNIST CNN demo
 
 ;; Sample data: https://github.com/matthewdowney/clojure-neural-networks-from-scratch/raw/main/resources/mnist/validation_data.edn.gz
@@ -177,3 +180,11 @@
                          {:name (str (name agg) "(d" n ")")
                           :x x
                           :y (map (fn [p] (get-in p [:grads n agg])) (:progress results))}))})
+
+^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
+(defn build-static-html
+  "Run with `lein run -m lambda-autodiff.examples.cnn/build-static-html`"
+  []
+  (clerk/clear-cache!)
+  (clerk/build! {:paths ["src/lambda_autodiff/examples/cnn.clj"]
+                 :out-path "doc/examples/cnn"}))
