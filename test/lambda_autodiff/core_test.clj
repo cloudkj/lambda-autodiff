@@ -180,7 +180,7 @@
         f (pow e 2.0)
         g (div f (make-node 2.0))
         g (add g (div (make-node 10.0) f))
-        grads (differentiate g false)]
+        grads (differentiate g)]
     (is (ma/equals 24.7041 (.value g) 1e-4))
     (is (ma/equals 138.8338 (get grads a) 1e-4))
     (is (ma/equals 645.5773 (get grads b) 1e-4))
@@ -202,7 +202,7 @@
         f (pow e 2.0)
         g (div f (make-node 2.0))
         g (add g (div (make-node 10.0) f))
-        grads (differentiate g false)]
+        grads (differentiate g)]
     (is (ma/equals [24.7041 14112.0004 1104.5045] (.value g) 1e-4))
     (is (ma/equals [138.8338 4199.9999 939.9961] (get grads a) 1e-4))
     (is (ma/equals 36384.5540 (get grads b) 1e-4))

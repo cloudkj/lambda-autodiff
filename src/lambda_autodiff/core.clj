@@ -16,7 +16,7 @@
           v (if (< (count v) 10) v (str (subs v 0 10) "..."))]
       (if (nil? (.label node))
         v
-        (format "%s [%s]" (.label node) v)))))
+        (format "%s {%s}" (.label node) v)))))
 
 (defn make-node
   "Creates a node in the computational graph"
@@ -140,36 +140,59 @@
 
 ;; Differentiation
 
+(defn topological-sort
+  [root]
+  (loop [stack (list root)
+         started #{}
+         finished #{}
+         sorted (list)]
+    (if (empty? stack)
+      sorted
+      (let [node (peek stack)]
+        (cond (not (contains? started node))
+              (recur (reduce conj stack (map first (.children node))) ;; Push children onto stack
+                     (conj started node)                              ;; Mark as started
+                     finished
+                     sorted)
+              (not (contains? finished node))
+              (recur (pop stack)          ;; Pop stack
+                     started
+                     (conj finished node) ;; Mark as finished
+                     (cons node sorted))  ;; Store result
+              :else
+              (recur (pop stack) started finished sorted))))))
+
+(defn shape-gradients
+  "Post-process gradients at the end of accumulation to account for different shapes"
+  [gradients]
+  (->> gradients
+       (map (fn [[c g]]
+              [c
+               ;; If child shape is smaller than gradient shape, sum gradient along axes that would be expanded during broadcasting
+               (cond (< (ma/count (.value c)) (ma/count g))
+                     (->> (ma/broadcast-axes (ma/shape (.value c)) (ma/shape g))
+                          (ma/asum g))
+                     ;; If child shape is larger than gradient shape, broadcast gradient to match child shape
+                     (> (ma/count (.value c)) (ma/count g))
+                     (ma/broadcast g (ma/shape (.value c)))
+                     :else g)]))
+       ;; Reshape gradient to match child shape if dimensionality unequal
+       (map (fn [[c g]] [c (if (not (= (ma/dimensionality (.value c)) (ma/dimensionality g))) (ma/reshape g (ma/shape (.value c))) g)]))
+       (into {})))
+
 (defn differentiate
   "Returns a map of nodes to partial derivative values"
-  ([root]
-   (differentiate root true))
-  ([root filter-leaf?]
-   (loop [gradients {}
-         ;; Reshape base derivative to match root output shape
-         stack (list [root (ma/ones (ma/shape (.value root)))])]
-     (if (empty? stack)
-       ;; Post-process gradients at the end of accumulation to account for different shapes
-       (->> gradients
-           (map (fn [[c g]]
-                   [c
-                   ;; If child shape is smaller than gradient shape, sum gradient along axes that would be expanded during broadcasting
-                   (cond (< (ma/count (.value c)) (ma/count g))
-                         (->> (ma/broadcast-axes (ma/shape (.value c)) (ma/shape g))
-                               (ma/asum g))
-                         ;; If child shape is larger than gradient shape, broadcast gradient to match child shape
-                         (> (ma/count (.value c)) (ma/count g))
-                         (ma/broadcast g (ma/shape (.value c)))
-                         :else g)]))
-           ;; Reshape gradient to match child shape if dimensionality unequal
-           (map (fn [[c g]] [c (if (not (= (ma/dimensionality (.value c)) (ma/dimensionality g))) (ma/reshape g (ma/shape (.value c))) g)]))
-           (into {}))
-       (let [[node upstream] (peek stack)
-             ;; Apply chain rule along path from root to child with update function
-             children (map (fn [[child update]] [child (update upstream)]) (.children node))]
-         (recur ;; Accumulate gradients for each leaf node child to apply multivariate chain rule
-               (->> (if filter-leaf? (filter (fn [[child downstream]] (leaf? child)) children) children)
-                    (reduce (fn [gs [child downstream]] (assoc gs child (ma/add (get gs child 0) downstream)))
-                             gradients))
-               ;; Push all child nodes onto stack and pass derivatives, from root to child thus far, downstream
-               (reduce conj (pop stack) children)))))))
+  [root]
+  (loop [gradients {root (ma/ones (ma/shape (.value root)))}
+         sorted (topological-sort root)]
+    (if (empty? sorted)
+        (shape-gradients gradients)
+        (let [node (first sorted)
+              upstream (get gradients node)
+              ;; Apply chain rule by passing local derivative to children to compute downstream derivatives
+              children (map (fn [[child update]] [child (update upstream)]) (.children node))]
+          (recur ;; Accumulate gradients for each child to apply multivariate chain rule
+                 (reduce (fn [gs [child downstream]] (assoc gs child (ma/add (get gs child 0) downstream)))
+                         gradients
+                         children)
+                 (rest sorted))))))
