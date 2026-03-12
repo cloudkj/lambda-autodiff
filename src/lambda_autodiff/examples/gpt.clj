@@ -31,7 +31,7 @@
 ^{:nextjournal.clerk/visibility {:result :hide}}
 (def n-layer 1)
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def n-embd 16)
+(def n-embd 32)
 ^{:nextjournal.clerk/visibility {:result :hide}}
 (def block-size 16)
 ^{:nextjournal.clerk/visibility {:result :hide}}
@@ -186,6 +186,9 @@
 ;; ### Inference
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
+(def temperature 0.5)
+
+^{:nextjournal.clerk/visibility {:result :hide}}
 (defn infer
   [state-dict sample-size]
   (let [chars (set/map-invert uchars)]
@@ -199,7 +202,7 @@
                            (= token-id BOS) (butlast sample)
                            :else (let [token-id (if (nil? token-id) BOS token-id)
                                        [logits keys values] (gpt token-id pos-id keys values state-dict)
-                                       probs (softmax logits)
+                                       probs (softmax (div logits (make-node temperature)))
                                        token-id (util/choose (ma/flatten (.value probs)))]
                                     (recur (inc pos-id) token-id keys values (conj sample (chars token-id))))))]
         (apply str sample)))))
@@ -229,8 +232,8 @@
 ;; ### Results
 
 (def results
-  (let [num-steps 1000
-        sample-step 50]
+  (let [num-steps 2000
+        sample-step 100]
     (train num-steps sample-step)))
 
 ^{:nextjournal.clerk/visibility {:code :hide}}
