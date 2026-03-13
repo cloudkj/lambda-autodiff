@@ -1,4 +1,5 @@
-(ns lambda-autodiff.util)
+(ns lambda-autodiff.util
+  (:require [lambda-autodiff.core :as core]))
 
 (defn choose
   "Given a probability distribution, sample from the distribution and return the selected index"
@@ -17,18 +18,29 @@
 (defn make-graphviz-dot
   "Generates the computational graph starting at a node in Graphviz DOT format"
   [root]
-  (loop [dot (str "digraph G {\n")
-         stack (list root)]
+  (loop [stack (list root)
+         nodes #{}
+         edges {}]
     (if (empty? stack)
-      (str dot "}")
-      (let [node (peek stack)
-            dot' (str dot (format "%s [label=\"%s\"];\n" (hash node) (str node)))]
-        (recur (->> (.children node)
-                    (map (fn [[child weight]] (format "%s -> %s [label=\"%s\"];\n" (hash node) (hash child) weight)))
-                    (reduce str dot'))
-               (->> (.children node)
-                    (map (fn [[child _]] child))
-                    (reduce conj (pop stack))))))))
+      (let [dot (str "digraph G {\n")
+            dot (->> nodes
+                     (map (fn [node]
+                             (let [label (if (nil? (.label node)) (str node) (.label node))]
+                               (format "%s [label=\"%s\"];\n" (hash node) label))))
+                     (reduce str dot))
+            dot (->> edges
+                     (mapcat (fn [[node children-indexed]] (map #(list node %) (vals children-indexed))))
+                     (map (fn [[node child]] (format "%s -> %s;\n" (hash node) (hash child))))
+                     (reduce str dot))]
+        (str dot "}"))
+      (let [node (peek stack)]
+        (recur (->> (if (core/leaf? node) (list) (.children node))
+                    (map first)
+                    (reduce conj (pop stack)))
+               (conj nodes node)
+               (->> (if (core/leaf? node) (list) (.children node))
+                    (map-indexed (fn [i [child _]] [i child]))
+                    (reduce (fn [e [i child]] (assoc-in e [node i] child)) edges)))))))
 
 (defn count-graph
   "Counts number of nodes and edges in the graph starting at a given node"
