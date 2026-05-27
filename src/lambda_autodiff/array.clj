@@ -85,8 +85,8 @@
 (defn sample-normal
   ([shape]
    (mr/sample-normal shape))
-  ([shape std]
-   (m/mul (mr/sample-normal shape) std)))
+  ([shape seed]
+   (mr/sample-normal shape seed)))
 
 (defn select
   [a & indexes]
