@@ -129,24 +129,26 @@
 ;; ### Model
 ;;
 ;; Define weights and biases:
+^{:nextjournal.clerk/visibility {:result :hide}}
+(def seed 123)
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w1 (make-node (ma/sample-normal [16 2])))
+(def w1 (make-node (ma/sample-normal [16 2] seed)))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b1 (make-node (ma/sample-normal [16])))
+(def b1 (make-node (ma/sample-normal [16] seed)))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w2 (make-node (ma/sample-normal [16 16])))
+(def w2 (make-node (ma/sample-normal [16 16] seed)))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b2 (make-node (ma/sample-normal [16])))
+(def b2 (make-node (ma/sample-normal [16] seed)))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def w3 (make-node (ma/sample-normal [1 16])))
+(def w3 (make-node (ma/sample-normal [1 16] seed)))
 
 ^{:nextjournal.clerk/visibility {:result :hide}}
-(def b3 (make-node (ma/sample-normal [1])))
+(def b3 (make-node (ma/sample-normal [1] seed)))
 
 ;; Total number of parameters:
 
@@ -239,8 +241,8 @@
 
 ^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
 (defn build-static-html
-  "Run with `lein run -m lambda-autodiff.examples.mlp/build-static-html`"
-  []
+  "Run with `clj -X lambda-autodiff.examples.mlp/build-static-html"
+  [_]
   (clerk/clear-cache!)
   (clerk/build! {:paths ["src/lambda_autodiff/examples/mlp.clj"]
                  :out-path "doc/examples/mlp"}))
