@@ -1,0 +1,4 @@
+{:deps {org.clojure/math.combinatorics {:mvn/version "0.3.0"}
+        net.mikera/core.matrix {:mvn/version "0.63.0"}
+        net.mikera/vectorz-clj {:mvn/version "0.48.0"}
+        io.github.nextjournal/clerk {:mvn/version "0.16.1016"}}}
